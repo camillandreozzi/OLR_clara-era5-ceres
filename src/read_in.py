@@ -346,15 +346,33 @@ def era5_to_ceres_grid(ds):
     return out
 
 
+def grid_edges(res):
+    """Cell edges (lat, lon) of the res x res deg grid starting at (-90, -180).
+
+    When res does not divide 180 / 360 (e.g. 7 deg), the last row / column is narrower and ends at 90 / 180.
+    """
+    res = int(res)
+    return (np.minimum(np.arange(-90, 90 + res, res), 90).astype(float),
+            np.minimum(np.arange(-180, 180 + res, res), 180).astype(float))
+
+
+def grid_centres(res):
+    """Cell centres (lat, lon) of grid_edges(res)."""
+    return tuple((e[:-1] + e[1:]) / 2 for e in grid_edges(res))
+
+
 def coarsen(ds, res):
-    """Area-weighted average of a 1 deg (time, lat, lon) Dataset onto res x res deg cells (res an integer)."""
+    """Area-weighted average of a 1 deg (time, lat, lon) Dataset onto the res x res deg cells of grid_edges(res)."""
     if res == 1:
         return ds
     w = np.cos(np.radians(ds.lat)) * xr.ones_like(ds.lon)
+    lat, lon = grid_centres(res)
     out = xr.Dataset()
     for v in ds.data_vars:
         wv = w.where(ds[v].notnull())
-        out[v] = (ds[v] * wv).coarsen(lat=res, lon=res).sum() / wv.coarsen(lat=res, lon=res).sum()
+        num = (ds[v] * wv).coarsen(lat=res, lon=res, boundary="pad").sum()
+        den = wv.coarsen(lat=res, lon=res, boundary="pad").sum()
+        out[v] = (num / den).assign_coords(lat=lat, lon=lon)
         out[v].attrs = ds[v].attrs
     return out
 
@@ -364,7 +382,8 @@ def grid_clara(df, res, freq="M"):
 
     Returns a Dataset with 'olr' (mean of all samples in the cell, W m-2) and 'count'.
     """
-    nlat, nlon = int(round(180 / res)), int(round(360 / res))
+    lat_c, lon_c = grid_centres(res)
+    nlat, nlon = len(lat_c), len(lon_c)
     i = np.clip(np.floor((df.clara_lat.to_numpy() + 90) / res).astype(int), 0, nlat - 1)
     j = np.clip(np.floor((df.clara_lon.to_numpy() + 180) / res).astype(int), 0, nlon - 1)
     periods = df.time.dt.to_period(freq)
@@ -377,7 +396,7 @@ def grid_clara(df, res, freq="M"):
     with np.errstate(invalid="ignore"):
         mean = np.where(count > 0, total / count, np.nan)
     coords = {"time": [l.to_timestamp() for l in labels],
-              "lat": -90 + res * (np.arange(nlat) + 0.5), "lon": -180 + res * (np.arange(nlon) + 0.5)}
+              "lat": lat_c, "lon": lon_c}
     return xr.Dataset({"olr": (("time", "lat", "lon"), mean), "count": (("time", "lat", "lon"), count)},
                       coords=coords)
 

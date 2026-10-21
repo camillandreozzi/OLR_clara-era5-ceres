@@ -45,6 +45,7 @@ import xarray as xr
 from matplotlib.colors import LinearSegmentedColormap
 from scipy import stats
 
+import read_in
 from plot_raw_means import CMAP as COUNT_CMAP, INK, MUTED, RESULTS_DIR, ccrs, load, to_grid
 
 OUT_DIR = RESULTS_DIR / "correlation"
@@ -217,8 +218,7 @@ def plot_maps(pair_maps, title, min_n, path):
     fig, axes = plt.subplots(1, len(pair_maps), figsize=(18, 4.6), layout="constrained", **kw)
     for ax, ((xn, yn), ds) in zip(axes, pair_maps.items()):
         res = float(ds.lat[1] - ds.lat[0])
-        lon_edges = np.arange(-180, 180 + res / 2, res)
-        lat_edges = np.arange(-90, 90 + res / 2, res)
+        lat_edges, lon_edges = read_in.grid_edges(round(res))
         extra = {"transform": ccrs.PlateCarree()} if ccrs else {}
         mesh = ax.pcolormesh(lon_edges, lat_edges, np.ma.masked_invalid(ds.r.values),
                              cmap=CORR_CMAP, vmin=-1, vmax=1, **extra)

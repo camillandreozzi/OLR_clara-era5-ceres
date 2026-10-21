@@ -115,8 +115,7 @@ def plot_period(datasets, t, label, path, yearly, title="Raw mean OLR"):
     fig, axes = plt.subplots(1, 3, figsize=(18, 4.6), layout="constrained", **kw)
     ref = next(ds for ds in datasets.values())
     res = float(ref.lat[1] - ref.lat[0])
-    lon_edges = np.arange(-180, 180 + res / 2, res)
-    lat_edges = np.arange(-90, 90 + res / 2, res)
+    lat_edges, lon_edges = read_in.grid_edges(round(res))
 
     mesh = None
     for ax, (name, sel) in zip(axes, sels.items()):
