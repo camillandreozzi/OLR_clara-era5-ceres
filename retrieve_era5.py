@@ -12,16 +12,19 @@ Products:
              -> data/ERA5/hourly/era5_ttr_hourly_<yyyy>_<mm>.nc. Needed to collocate with CLARA
              samples in time. Defaults to a 1 deg grid to keep the volume manageable (~200 MB/month).
 
-Existing files are skipped, so the script can be re-run to resume an interrupted download.
+Existing files are skipped, so the script can be re-run to resume an interrupted download. Months that
+ERA5 has not published yet (it runs ~5 days behind real time) are left out; a yearly monthly-means file
+that is missing months is downloaded again, so re-running fills in the current year as it progresses.
 Convert to OLR in W m-2 with read_in.read_era5(), which applies -ttr/86400 (monthly) or -ttr/3600 (hourly).
 
 Examples:
-    python retrieve_era5.py                                  # monthly, 2020-2025, native 0.25 deg
+    python retrieve_era5.py                                  # monthly, 2020-2026, native 0.25 deg
     python retrieve_era5.py --product hourly --years 2021    # hourly 2021 on a 1 deg grid
     python retrieve_era5.py --clear-sky --dry-run            # print the requests only
 """
 
 import argparse
+import datetime as dt
 import sys
 from pathlib import Path
 
@@ -35,15 +38,31 @@ DATASETS = {
     "hourly": "reanalysis-era5-single-levels",
 }
 DEFAULT_GRID = {"monthly": None, "hourly": 1.0}  # None = native 0.25 deg
-DEFAULT_YEARS = list(range(2020, 2026))  # CLARA 2020-2025, CERES 2021-2025
+DEFAULT_YEARS = list(range(2020, 2027))  # CLARA 2020-2026, CERES 2021-2025
+ERA5_LAG = dt.timedelta(days=6)  # a month is requested once it ended at least this long ago
 
 MONTHS = [f"{m:02d}" for m in range(1, 13)]
 DAYS = [f"{d:02d}" for d in range(1, 32)]
 HOURS = [f"{h:02d}:00" for h in range(24)]
 
 
+def published(year, month, today=None):
+    """True when ERA5 has the whole month: it ended at least ERA5_LAG ago."""
+    end = dt.date(year + month // 12, month % 12 + 1, 1)
+    return end + ERA5_LAG <= (today or dt.date.today())
+
+
+def is_complete(target, n_times):
+    """True when target exists and holds n_times time steps."""
+    if not target.exists():
+        return False
+    import xarray as xr
+    with xr.open_dataset(target) as ds:
+        return ds.sizes.get("valid_time", 0) >= n_times
+
+
 def build_requests(product, years, months, variables, grid):
-    """Yield (target path, request dict) pairs, one per output file."""
+    """Yield (target path, request dict) pairs, one per output file, for published months only."""
     base = {
         "product_type": ["monthly_averaged_reanalysis" if product == "monthly" else "reanalysis"],
         "variable": variables,
@@ -55,11 +74,14 @@ def build_requests(product, years, months, variables, grid):
 
     out_dir = ERA5_DIR / product
     for year in years:
+        available = [m for m in months if published(year, int(m))]
+        if not available:
+            continue
         if product == "monthly":
             yield (out_dir / f"era5_ttr_monthly_{year}.nc",
-                   {**base, "year": [str(year)], "month": months, "time": ["00:00"]})
+                   {**base, "year": [str(year)], "month": available, "time": ["00:00"]})
         else:
-            for month in months:
+            for month in available:
                 yield (out_dir / f"era5_ttr_hourly_{year}_{month}.nc",
                        {**base, "year": [str(year)], "month": [month], "day": DAYS, "time": HOURS})
 
@@ -94,7 +116,8 @@ def main():
 
     client = cdsapi.Client()
     for target, request in requests:
-        if target.exists():
+        n_times = len(request["month"]) if args.product == "monthly" else 1
+        if is_complete(target, n_times):
             print(f"skip {target.name} (exists)")
             continue
         target.parent.mkdir(parents=True, exist_ok=True)

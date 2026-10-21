@@ -2,18 +2,21 @@
 
 Data layout (relative to the repo root):
 
-    data/CLARA/CLARA_OLR.tar.gz            IDL .save files, one per month (CLARA_OLR_<yyyy>_<m>.save).
+    data/CLARA/CLARA_OLR*.tar.gz           IDL .save files, one per month (CLARA_OLR_<yyyy>_<m>.save):
+                                           CLARA_OLR.tar.gz holds 2020-2024, CLARA_OLR_<yyyy>.tar.gz one year
+                                           each (2025 onwards; a month in a yearly archive takes precedence).
                                            Each holds a struct OLR_ALL with JDAY (Julian date, UTC) and
                                            OLR at ~30 s cadence. The OLR channel also sees the Sun:
                                            values of ~1e4-9e4 are sun-viewing periods, not Earth OLR.
     data/CLARA/CLARA_lat_lon_<yyyy>.tar.gz CSV files, one per day (CLARA_lon_lat_alt-<yyyy>-<m>-<d>_V50_1_4[_test].csv)
                                            at 1 min cadence with the satellite position and the CLARA
                                            footprint as "(lat, lon, alt_m)" tuples (WGS84 geodetic). The
-                                           footprint is "(0, 0, 0)" when CLARA is not viewing the Earth.
-                                           The file footprint is the FAR intersection of CLARA's line of
-                                           sight with a 6371 km sphere (always beyond the satellite's
-                                           horizon); read_clara_geolocation() replaces it with the near
-                                           intersection, i.e. the point CLARA actually sees.
+                                           footprint is "(0, 0, 0)" when CLARA looks away from the Earth
+                                           (z angle > 90 deg) and empty when its line of sight passes
+                                           above the limb. The footprint is the near intersection of the
+                                           line of sight with a 6371 km sphere, the point CLARA sees.
+                                           Releases before 2026-10-21 stored the FAR intersection instead;
+                                           read_clara_geolocation() recomputes the near one either way.
     data/CERES/CERES_EBAF_*.nc             CERES EBAF Ed4.2.1 monthly TOA all-sky LW flux (toa_lw_all_mon), 1 deg.
     data/ERA5/*.nc                         ERA5 top net thermal radiation (ttr), downloaded by retrieve_era5.py.
 
@@ -26,7 +29,9 @@ Usage:
 """
 
 import argparse
+import os
 import re
+import shutil
 import tarfile
 from pathlib import Path
 
@@ -58,8 +63,8 @@ FOOTPRINT_SPHERE_R = 6_371_000.0  # m
 _TO_ECEF = Transformer.from_crs("EPSG:4979", "EPSG:4978", always_xy=True)  # WGS84 (lon, lat, h) -> ECEF
 _FROM_ECEF = Transformer.from_crs("EPSG:4978", "EPSG:4979", always_xy=True)
 
-OLR_FILE_RE = re.compile(r"CLARA_OLR_(\d{4})_(\d{1,2})\.save$")
-GEO_FILE_RE = re.compile(r"CLARA_lon_lat_alt-(\d{4})-(\d{1,2})-(\d{1,2})_V50_1_4(?:_test)?\.csv$")
+OLR_FILE_RE = re.compile(r"^CLARA_OLR_(\d{4})_(\d{1,2})\.save$")
+GEO_FILE_RE = re.compile(r"^CLARA_lon_lat_alt-(\d{4})-(\d{1,2})-(\d{1,2})_V50_1_4(?:_test)?\.csv$")
 TUPLE_RE = r"\(\s*([-\d.eE+]+)\s*,\s*([-\d.eE+]+)\s*,\s*([-\d.eE+]+)\s*\)"
 
 
@@ -68,14 +73,21 @@ TUPLE_RE = r"\(\s*([-\d.eE+]+)\s*,\s*([-\d.eE+]+)\s*,\s*([-\d.eE+]+)\s*\)"
 # ---------------------------------------------------------------------------
 
 def _extract(archive):
-    """Extract a tar.gz archive once into data/CLARA/extracted/<archive stem>/ and return that folder."""
+    """Extract a tar.gz archive into data/CLARA/extracted/<archive stem>/ and return that folder.
+
+    The extraction is reused until the archive is replaced by a newer one.
+    """
     out = EXTRACT_DIR / archive.name.removesuffix(".tar.gz")
+    if out.exists() and archive.stat().st_mtime > out.stat().st_mtime:
+        print(f"{archive.name} is newer than its extraction; extracting again")
+        shutil.rmtree(out)
     if not out.exists():
         tmp = out.with_name(out.name + ".part")
         tmp.mkdir(parents=True, exist_ok=True)
         with tarfile.open(archive) as tar:
             tar.extractall(tmp, filter="data")
         tmp.rename(out)
+        os.utime(out)  # stamp the extraction time, compared with the archive's on the next call
     return out
 
 
@@ -89,13 +101,16 @@ def read_clara_olr(years=None):
     The raw signal is kept as is (including sun-viewing samples); use the
     geolocation merge in read_clara() to select Earth-viewing samples.
     """
-    folder = _extract(CLARA_DIR / "CLARA_OLR.tar.gz")
+    paths = {}
+    # "CLARA_OLR.tar.gz" sorts before "CLARA_OLR_<yyyy>.tar.gz", so a month in a yearly archive wins.
+    for archive in sorted(CLARA_DIR.glob("CLARA_OLR*.tar.gz")):
+        for path in _extract(archive).glob("*.save"):
+            m = OLR_FILE_RE.search(path.name)
+            if m and _in_years(int(m.group(1)), years):
+                paths[int(m.group(1)), int(m.group(2))] = path
     frames = []
-    for path in sorted(folder.glob("*.save")):
-        m = OLR_FILE_RE.search(path.name)
-        if not m or not _in_years(int(m.group(1)), years):
-            continue
-        rec = readsav(str(path))["olr_all"][0]
+    for key in sorted(paths):
+        rec = readsav(str(paths[key]))["olr_all"][0]
         # IDL save files are big-endian; convert to native floats for pandas.
         jday = np.asarray(rec["JDAY"], dtype=np.float64)
         olr = np.asarray(rec["OLR"], dtype=np.float64)
@@ -113,7 +128,8 @@ def _ecef(lat, lon, alt):
 
 def near_footprint(sat_lat, sat_lon, sat_alt, fp_lat, fp_lon, fp_alt):
     """Return (lat, lon, vza) of the near intersection of the satellite -> file-footprint line with the
-    6371 km sphere, i.e. the point CLARA looks at. The file footprint is the far intersection of the same line.
+    6371 km sphere, i.e. the point CLARA looks at. For current files this is the file footprint itself;
+    older releases stored the far intersection of the same line, which this maps back to the near one.
 
     vza is the viewing zenith angle at the footprint (deg; 0 = satellite overhead, 90 = grazing the limb),
     measured from the WGS84 surface normal.
@@ -135,7 +151,8 @@ def _read_geo_csv(path, date, raw_footprint=False):
     df.columns = [c.lstrip("# ").strip() for c in df.columns]
     sat = df["satellite_lat_long"].str.extract(TUPLE_RE).astype(float).to_numpy()
     fov = df["clara_lat_long"].str.extract(TUPLE_RE).astype(float).to_numpy()
-    earth_view = ~(fov == 0).all(axis=1)
+    # "(0, 0, 0)" = looking away from the Earth, empty (NaN) = line of sight above the limb.
+    earth_view = np.isfinite(fov).all(axis=1) & ~(fov == 0).all(axis=1)
     lat, lon, vza = np.full((3, len(df)), np.nan)
     if raw_footprint:
         lat[earth_view], lon[earth_view] = fov[earth_view, 0], fov[earth_view, 1]
@@ -150,6 +167,15 @@ def _read_geo_csv(path, date, raw_footprint=False):
     })
 
 
+def _read_geo_csv_empty():
+    """An empty geolocation table with the columns of _read_geo_csv()."""
+    df = pd.DataFrame({c: pd.Series(dtype=float) for c in
+                       ("z_angle", "sat_lat", "sat_lon", "sat_alt", "clara_lat", "clara_lon", "vza")})
+    df.insert(0, "time", pd.Series(dtype="datetime64[ns]"))
+    df["earth_view"] = pd.Series(dtype=bool)
+    return df
+
+
 def read_clara_geolocation(years=None, raw_footprint=False):
     """Return the 1-minute CLARA geolocation as a DataFrame.
 
@@ -157,7 +183,7 @@ def read_clara_geolocation(years=None, raw_footprint=False):
     clara_lat, clara_lon (footprint, NaN when not Earth viewing), vza (deg), earth_view (bool).
 
     The footprint is the near-side intersection of the line of sight (see near_footprint);
-    raw_footprint=True returns the far-side point as stored in the files instead (no vza).
+    raw_footprint=True returns the point as stored in the files instead (no vza).
     When a day exists both as a "_test" and a final file, the final one is used.
     """
     paths = {}
@@ -171,6 +197,8 @@ def read_clara_geolocation(years=None, raw_footprint=False):
             if m:
                 paths.setdefault(pd.Timestamp(int(m.group(1)), int(m.group(2)), int(m.group(3))), path)
     frames = [_read_geo_csv(paths[date], date, raw_footprint) for date in sorted(paths)]
+    if not frames:  # e.g. OLR years without a CLARA_lat_lon_<yyyy> archive yet
+        return _read_geo_csv_empty()
     df = pd.concat(frames, ignore_index=True)
     return df.sort_values("time", kind="stable").drop_duplicates("time").reset_index(drop=True)
 
@@ -192,6 +220,13 @@ def geolocate(olr, geo):
     geolocation rows are at most GEO_MAX_GAP apart; the footprint is only
     filled when both neighbours are Earth viewing.
     """
+    if len(geo) < 2:  # nothing to interpolate between, so no sample is geolocated
+        out = olr.copy()
+        for col in ("z_angle", "sat_lat", "sat_lon", "sat_alt", "clara_lat", "clara_lon", "vza"):
+            out[col] = np.nan
+        out["earth_view"] = False
+        out["in_range"] = out["olr"].between(OLR_MIN, OLR_MAX)
+        return out
     tg = geo["time"].to_numpy("datetime64[ns]").astype(np.int64)
     to = olr["time"].to_numpy("datetime64[ns]").astype(np.int64)
     right = np.searchsorted(tg, to).clip(1, len(tg) - 1)
@@ -226,7 +261,7 @@ def read_clara(years=None, raw_footprint=False):
     """Return geolocated CLARA OLR samples (see geolocate() for the columns).
 
     Select usable Earth-viewing OLR with: df[df.earth_view & df.in_range]
-    raw_footprint=True keeps the (wrong) far-side footprint from the files, for comparison only.
+    raw_footprint=True keeps the footprint as stored in the files, for comparison only.
     """
     return geolocate(read_clara_olr(years), read_clara_geolocation(years, raw_footprint))
 
@@ -356,6 +391,9 @@ def _summarise_clara(df):
     all_months = pd.period_range(df.time.min(), df.time.max(), freq="M")
     missing = [str(p) for p in all_months if p not in per_month.index]
     print(f"  months with usable OLR: {len(per_month)}; without: {', '.join(missing) or 'none'}")
+    located = df.sat_lat.notna().groupby(df.time.dt.to_period("M")).any()
+    unlocated = [str(p) for p, ok in located.items() if not ok]
+    print(f"  months with OLR but no geolocation: {', '.join(unlocated) or 'none'}")
 
 
 def _summarise_grid(name, ds):
