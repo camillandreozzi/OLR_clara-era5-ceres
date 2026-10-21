@@ -1,0 +1,101 @@
+"""Histograms of the Earth-viewing CLARA OLR samples within [0, 500] W m-2, overall and per year, and
+the same compared with ERA5 and CERES.
+
+Only Earth-viewing samples (read_in.read_clara, earth_view) are kept, and of those only negative values
+and values above 500 W m-2 are removed; the [OLR_MIN, OLR_MAX] in_range filter is not applied.
+In the comparison, ERA5 and CERES are the monthly mean values of all 1 deg cells (ERA5 area-averaged
+onto the CERES grid), weighted by cos(lat); all three are normalised to a probability density.
+The raw OLR is quantised in steps of OLR_STEP, so each bin spans a whole number of steps, centred on
+them; otherwise neighbouring bins would alternately hold more and fewer possible values.
+
+Output:
+    results/olr_hist/olr_hist_all.png
+    results/olr_hist/olr_hist_<yyyy>.png
+    results/olr_hist/era5_ceres_clara/olr_hist_all.png
+    results/olr_hist/era5_ceres_clara/olr_hist_<yyyy>.png
+
+Usage:
+    python src/plot_olr_hist.py
+"""
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+import read_in
+from plot_raw_means import RESULTS_DIR
+
+OLR_LO, OLR_HI = 0.0, 500.0  # W m-2, samples kept
+OLR_STEP = 0.65336  # W m-2, quantisation of the raw OLR (values are whole multiples of it)
+STEPS_PER_BIN = 8  # bin width = 8 steps ~ 5.2 W m-2
+BINS = (np.arange(0, OLR_HI / OLR_STEP + STEPS_PER_BIN, STEPS_PER_BIN) - 0.5) * OLR_STEP
+
+
+def plot(olr, title, path):
+    fig, ax = plt.subplots(figsize=(7, 4.5), layout="constrained")
+    ax.hist(olr, bins=BINS)
+    ax.set_title(title)
+    ax.set_xlabel("OLR (W m$^{-2}$)")
+    ax.set_ylabel("samples")
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def plot_compare(series, title, path):
+    """series: {label: (values, weights or None)}, drawn as density step histograms on one axis."""
+    fig, ax = plt.subplots(figsize=(9, 5), layout="constrained")
+    for label, (values, weights) in series.items():
+        ax.hist(values, bins=BINS, weights=weights, density=True, histtype="step", lw=1.5, label=label)
+    ax.set_title(title)
+    ax.set_xlabel("OLR (W m$^{-2}$)")
+    ax.set_ylabel("probability density (per W m$^{-2}$)")
+    fig.legend(loc="outside lower center", ncol=len(series), frameon=False)
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def grid_values(ds):
+    """Cell values of a monthly (time, lat, lon) Dataset within [OLR_LO, OLR_HI], with cos(lat) weights and years."""
+    olr = ds.olr.transpose("time", "lat", "lon")
+    w = np.broadcast_to(np.cos(np.radians(olr.lat.values))[None, :, None], olr.shape)
+    year = np.broadcast_to(olr.time.dt.year.values[:, None, None], olr.shape)
+    v = olr.values
+    keep = (v >= OLR_LO) & (v <= OLR_HI)
+    return v[keep], w[keep], year[keep]
+
+
+def compare(clara):
+    """Density histograms of CLARA vs ERA5 and CERES, overall and per year."""
+    gridded = {"ERA5": grid_values(read_in.era5_to_ceres_grid(read_in.read_era5("monthly"))),
+               "CERES EBAF": grid_values(read_in.read_ceres())}
+    points = {"CLARA Earth viewing": (clara.olr.to_numpy(), None, clara.time.dt.year.to_numpy())} | gridded
+    out_dir = RESULTS_DIR / "olr_hist" / "era5_ceres_clara"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    span = lambda y: f"{y.min()}-{y.max()}" if y.min() != y.max() else f"{y.min()}"
+    plot_compare({f"{k} ({span(y)})": (v, w) for k, (v, w, y) in points.items()},
+                 "OLR, all years", out_dir / "olr_hist_all.png")
+    years = sorted(set().union(*(np.unique(y) for _, _, y in points.values())))
+    for year in years:
+        series = {k: (v[y == year], None if w is None else w[y == year])
+                  for k, (v, w, y) in points.items() if (y == year).any()}
+        plot_compare(series, f"OLR, {year}", out_dir / f"olr_hist_{year}.png")
+    print(f"wrote {1 + len(years)} figures to {out_dir}")
+
+
+def main():
+    clara = read_in.read_clara()
+    clara = clara[clara.earth_view & clara.olr.between(OLR_LO, OLR_HI)]
+    out_dir = RESULTS_DIR / "olr_hist"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    plot(clara.olr, f"CLARA Earth-viewing OLR, all years ({len(clara):,} samples)", out_dir / "olr_hist_all.png")
+    for year, df in clara.groupby(clara.time.dt.year):
+        plot(df.olr, f"CLARA Earth-viewing OLR, {year} ({len(df):,} samples)", out_dir / f"olr_hist_{year}.png")
+    print(f"wrote {1 + clara.time.dt.year.nunique()} figures to {out_dir}")
+    compare(clara)
+
+
+if __name__ == "__main__":
+    main()

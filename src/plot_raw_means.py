@@ -19,8 +19,8 @@ Output, one folder per grid spacing:
     results/rawmeans_<res>/yearly/rawmeans_<yyyy>.png
 
 Usage:
-    python plot_raw_means.py                # 1 deg (CERES native) and 5 x 5 deg averages
-    python plot_raw_means.py --res 2        # any whole-degree spacing(s)
+    python src/plot_raw_means.py            # 1 deg (CERES native) and 5 x 5 deg averages
+    python src/plot_raw_means.py --res 2    # any whole-degree spacing(s)
 """
 
 import argparse
@@ -99,13 +99,13 @@ def _panel_title(name, sel, clara_mask, yearly):
         return (f"{name}  ({int(sel['count'].sum()):,} samples, {coverage:.0%} of cells)\n"
                 f"mean {area_mean(sel.olr):.1f} W m$^{{-2}}$")
     line = f"mean {area_mean(sel.olr):.1f}"
-    if clara_mask is not None and bool(clara_mask.any()):
+    if clara_mask is not None and bool(clara_mask.any()) and bool((sel.olr.notnull() & ~clara_mask).any()):
         line += f"  |  on CLARA cells {area_mean(sel.olr, clara_mask):.1f}"
     months = f"  ({int(sel.n_months)} months)" if yearly else ""
     return f"{name}{months}\n{line} W m$^{{-2}}$"
 
 
-def plot_period(datasets, t, label, path, yearly):
+def plot_period(datasets, t, label, path, yearly, title="Raw mean OLR"):
     sels = {name: _select(ds, t) for name, ds in datasets.items()}
     if all(s is None for s in sels.values()):
         return False
@@ -142,7 +142,7 @@ def plot_period(datasets, t, label, path, yearly):
     cbar.set_label("OLR (W m$^{-2}$), grey = no data", color=INK, fontsize=9)
     cbar.ax.tick_params(colors=MUTED, labelsize=8)
     cbar.outline.set_visible(False)
-    fig.suptitle(f"Raw mean OLR, {label}", color=INK, fontsize=13, x=0.01, ha="left")
+    fig.suptitle(f"{title}, {label}", color=INK, fontsize=13, x=0.01, ha="left")
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=130, facecolor="white")
     plt.close(fig)

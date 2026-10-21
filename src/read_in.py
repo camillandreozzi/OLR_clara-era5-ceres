@@ -17,15 +17,15 @@ Data layout (relative to the repo root):
                                            line of sight with a 6371 km sphere, the point CLARA sees.
                                            Releases before 2026-10-21 stored the FAR intersection instead;
                                            read_clara_geolocation() recomputes the near one either way.
-    data/CERES/CERES_EBAF_*.nc             CERES EBAF Ed4.2.1 monthly TOA all-sky LW flux (toa_lw_all_mon), 1 deg.
+    data/CERES/CERES_EBAF*.nc              CERES EBAF Ed4.2.1 monthly TOA all-sky LW flux (toa_lw_all_mon), 1 deg.
     data/ERA5/*.nc                         ERA5 top net thermal radiation (ttr), downloaded by retrieve_era5.py.
 
 All gridded products are returned with OLR as a positive upward flux in W m-2, dims (time, lat, lon),
 lat ascending and lon in [-180, 180). Monthly products use the first of the month as their time stamp.
 
 Usage:
-    python read_in.py                 # read everything and print a summary
-    python read_in.py --save          # also write data/processed/clara_olr_geolocated.parquet
+    python src/read_in.py             # read everything and print a summary
+    python src/read_in.py --save      # also write data/processed/clara_olr_geolocated.parquet
 """
 
 import argparse
@@ -41,7 +41,7 @@ import xarray as xr
 from pyproj import Transformer
 from scipy.io import readsav
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # repo root; this file is in src/
 DATA_DIR = ROOT / "data"
 CLARA_DIR = DATA_DIR / "CLARA"
 CERES_DIR = DATA_DIR / "CERES"
@@ -284,7 +284,11 @@ def _month_start(ds):
 
 def read_ceres(path=None):
     """Return CERES EBAF monthly all-sky TOA LW flux as a Dataset with variable 'olr' (W m-2)."""
-    path = path or next(CERES_DIR.glob("CERES_EBAF*.nc"))
+    if path is None:
+        files = sorted(CERES_DIR.glob("CERES_EBAF*.nc"))
+        if len(files) != 1:
+            raise FileNotFoundError(f"expected one CERES_EBAF*.nc file in {CERES_DIR}, found {[f.name for f in files]}")
+        path = files[0]
     ds = xr.open_dataset(path).rename({"toa_lw_all_mon": "olr"})
     return _month_start(_standardise_grid(ds))
 
@@ -300,7 +304,7 @@ def read_era5(product="monthly", folder=None):
     folder = Path(folder) if folder else ERA5_DIR / product
     files = sorted(folder.glob("*.nc"))
     if not files:
-        raise FileNotFoundError(f"No ERA5 files in {folder}; run retrieve_era5.py --product {product} first.")
+        raise FileNotFoundError(f"No ERA5 files in {folder}; run src/retrieve_era5.py --product {product} first.")
     ds = xr.concat([xr.open_dataset(f) for f in files], dim="valid_time")
     ds = _standardise_grid(ds.drop_vars(["number", "expver"], errors="ignore"))
     out = xr.Dataset({"olr": -ds["ttr"] / seconds})

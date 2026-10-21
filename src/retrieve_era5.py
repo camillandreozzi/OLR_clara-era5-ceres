@@ -18,9 +18,9 @@ that is missing months is downloaded again, so re-running fills in the current y
 Convert to OLR in W m-2 with read_in.read_era5(), which applies -ttr/86400 (monthly) or -ttr/3600 (hourly).
 
 Examples:
-    python retrieve_era5.py                                  # monthly, 2020-2026, native 0.25 deg
-    python retrieve_era5.py --product hourly --years 2021    # hourly 2021 on a 1 deg grid
-    python retrieve_era5.py --clear-sky --dry-run            # print the requests only
+    python src/retrieve_era5.py                                  # monthly, 2020-2026, native 0.25 deg
+    python src/retrieve_era5.py --product hourly --years 2021    # hourly 2021 on a 1 deg grid
+    python src/retrieve_era5.py --clear-sky --dry-run            # print the requests only
 """
 
 import argparse
@@ -30,7 +30,7 @@ from pathlib import Path
 
 import cdsapi
 
-ERA5_DIR = Path(__file__).resolve().parent / "data" / "ERA5"
+ERA5_DIR = Path(__file__).resolve().parent.parent / "data" / "ERA5"  # this file is in src/
 CDSAPIRC = Path.home() / ".cdsapirc"
 
 DATASETS = {
