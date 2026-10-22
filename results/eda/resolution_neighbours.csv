@@ -1,0 +1,5 @@
+direction,series,pairs,r
+east,CLARA,28651,0.2635
+east,ERA5 night,28651,0.9974
+north,CLARA,53001,0.2759
+north,ERA5 night,53001,0.9909

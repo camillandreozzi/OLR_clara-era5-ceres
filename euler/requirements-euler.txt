@@ -1,0 +1,12 @@
+# Python packages for fitting on Euler (torch is installed first, CPU-only, by euler/setup.sh).
+# No cartopy / cdsapi: maps and downloads run locally.
+numpy>=2.0
+pandas==2.3.3
+scipy>=1.13
+scikit-learn>=1.5
+pyarrow>=16
+xarray>=2024.6
+netCDF4>=1.7
+pyproj>=3.6
+matplotlib>=3.9
+pytest>=8

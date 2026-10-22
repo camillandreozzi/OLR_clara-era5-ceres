@@ -11,15 +11,23 @@ Products:
     hourly   reanalysis-era5-single-levels, one file per month
              -> data/ERA5/hourly/era5_ttr_hourly_<yyyy>_<mm>.nc. Needed to collocate with CLARA
              samples in time. Defaults to a 1 deg grid to keep the volume manageable (~200 MB/month).
+    monthly_by_hour
+             reanalysis-era5-single-levels-monthly-means, product "monthly averaged reanalysis by hour
+             of day": for each month, 24 fields, the monthly mean of the accumulation over the hour
+             ending at each UTC hour. One file per year, native 0.25 deg
+             -> data/ERA5/monthly_by_hour/era5_ttr_monthly_by_hour_<yyyy>.nc. Used to build the
+             night-time monthly mean OLR that matches CLARA's night-side sampling (harmonise.py).
 
 Existing files are skipped, so the script can be re-run to resume an interrupted download. Months that
 ERA5 has not published yet (it runs ~5 days behind real time) are left out; a yearly monthly-means file
 that is missing months is downloaded again, so re-running fills in the current year as it progresses.
-Convert to OLR in W m-2 with read_in.read_era5(), which applies -ttr/86400 (monthly) or -ttr/3600 (hourly).
+Convert to OLR in W m-2 with read_in.read_era5(), which applies -ttr/86400 (monthly) or -ttr/3600
+(hourly, monthly_by_hour).
 
 Examples:
     python src/retrieve_era5.py                                  # monthly, 2020-2026, native 0.25 deg
     python src/retrieve_era5.py --product hourly --years 2021    # hourly 2021 on a 1 deg grid
+    python src/retrieve_era5.py --product monthly_by_hour        # 24 hourly monthly means, 2020-2026
     python src/retrieve_era5.py --clear-sky --dry-run            # print the requests only
 """
 
@@ -35,9 +43,15 @@ CDSAPIRC = Path.home() / ".cdsapirc"
 
 DATASETS = {
     "monthly": "reanalysis-era5-single-levels-monthly-means",
+    "monthly_by_hour": "reanalysis-era5-single-levels-monthly-means",
     "hourly": "reanalysis-era5-single-levels",
 }
-DEFAULT_GRID = {"monthly": None, "hourly": 1.0}  # None = native 0.25 deg
+PRODUCT_TYPES = {
+    "monthly": "monthly_averaged_reanalysis",
+    "monthly_by_hour": "monthly_averaged_reanalysis_by_hour_of_day",
+    "hourly": "reanalysis",
+}
+DEFAULT_GRID = {"monthly": None, "monthly_by_hour": None, "hourly": 1.0}  # None = native 0.25 deg
 DEFAULT_YEARS = list(range(2020, 2027))  # CLARA 2020-2026, CERES 2021-2025
 ERA5_LAG = dt.timedelta(days=6)  # a month is requested once it ended at least this long ago
 
@@ -64,7 +78,7 @@ def is_complete(target, n_times):
 def build_requests(product, years, months, variables, grid):
     """Yield (target path, request dict) pairs, one per output file, for published months only."""
     base = {
-        "product_type": ["monthly_averaged_reanalysis" if product == "monthly" else "reanalysis"],
+        "product_type": [PRODUCT_TYPES[product]],
         "variable": variables,
         "data_format": "netcdf",
         "download_format": "unarchived",
@@ -80,6 +94,9 @@ def build_requests(product, years, months, variables, grid):
         if product == "monthly":
             yield (out_dir / f"era5_ttr_monthly_{year}.nc",
                    {**base, "year": [str(year)], "month": available, "time": ["00:00"]})
+        elif product == "monthly_by_hour":
+            yield (out_dir / f"era5_ttr_monthly_by_hour_{year}.nc",
+                   {**base, "year": [str(year)], "month": available, "time": HOURS})
         else:
             for month in available:
                 yield (out_dir / f"era5_ttr_hourly_{year}_{month}.nc",
@@ -116,7 +133,8 @@ def main():
 
     client = cdsapi.Client()
     for target, request in requests:
-        n_times = len(request["month"]) if args.product == "monthly" else 1
+        n_times = {"monthly": len(request["month"]),
+                   "monthly_by_hour": len(request["month"]) * len(HOURS)}.get(args.product, 1)
         if is_complete(target, n_times):
             print(f"skip {target.name} (exists)")
             continue

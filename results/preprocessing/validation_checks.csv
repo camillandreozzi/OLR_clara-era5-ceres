@@ -1,0 +1,12 @@
+check,value,expected
+"ERA5 hour-of-day 24 h mean equals monthly product (max |diff|, W m-2)",0.0071,< 0.1
+"ERA5 global mean OLR, 24 h (W m-2)",243.16242401112882,~240
+"ERA5 global mean OLR, night-time (fallback in polar day) (W m-2)",241.538996286889,close to the 24 h mean
+observed cell-months,188490.0,~188 k (1 deg feasibility test)
+observed cell-months without an ERA5 night value,0.0,0
+observed cell-months in polar-day fallback cells,0.0,~0
+cell-months in prediction grid,5248800.0,"81 months x 64,800 cells = 5,248,800"
+prediction-grid cell-months without a predictor value (gaps),0.0,0
+prediction-grid cell-months in polar day (darkest-hours fallback),608614.0,"flagged, extrapolation"
+"duplicate (time, lat, lon) in observations",0.0,0
+"CLARA cell-month means outside [olr_min, 400] W m-2",0.0,0

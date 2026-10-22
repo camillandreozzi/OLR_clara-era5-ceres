@@ -1,5 +1,23 @@
-.DS_Store
+# Python and tooling
 __pycache__/
+.pytest_cache/
+.venv/
+.DS_Store
+
+# Data: the raw CLARA and CERES archives are tracked; extracted, downloaded and derived files are not
 data/CLARA/extracted/
-data/processed/
 data/ERA5/
+data/processed/
+
+# Euler job logs
+logs/
+
+# Smoke-test run (config/pipeline_smoke.toml)
+results/model_smoke/
+
+# Model caches and gridded predictions: regenerable and too large for git
+# (src/predict_maps.py rebuilds the NetCDF and CSV files from the tracked full_model.pt)
+results/model/inducing/
+results/model/*/folds/
+results/model/*/*/*_predictions.nc
+results/model/*/*/*_predictions.csv

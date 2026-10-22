@@ -1,0 +1,143 @@
+group,lo,hi,centre,n,mean,median,sd,x,y
+post-gap,45,50,47.500,91,12.717,39.667,104.623,sza,clara_minus_era5_hour
+post-gap,50,55,52.500,424,36.442,51.626,98.304,sza,clara_minus_era5_hour
+post-gap,55,60,57.500,1186,40.493,53.668,92.018,sza,clara_minus_era5_hour
+post-gap,60,65,62.500,3651,59.566,70.307,88.229,sza,clara_minus_era5_hour
+post-gap,65,70,67.500,8514,49.040,50.419,74.122,sza,clara_minus_era5_hour
+post-gap,70,75,72.500,12778,27.214,27.021,67.073,sza,clara_minus_era5_hour
+post-gap,75,80,77.500,15022,10.623,11.154,64.750,sza,clara_minus_era5_hour
+post-gap,80,85,82.500,15679,-8.833,-7.343,59.475,sza,clara_minus_era5_hour
+post-gap,85,90,87.500,16054,-23.989,-23.274,57.996,sza,clara_minus_era5_hour
+post-gap,90,95,92.500,16170,-33.491,-32.053,57.855,sza,clara_minus_era5_hour
+post-gap,95,100,97.500,18580,-43.629,-38.473,65.970,sza,clara_minus_era5_hour
+post-gap,100,105,102.500,20539,-51.890,-47.387,70.071,sza,clara_minus_era5_hour
+post-gap,105,110,107.500,21993,-60.624,-59.161,62.201,sza,clara_minus_era5_hour
+post-gap,110,115,112.500,15341,-54.107,-53.490,46.645,sza,clara_minus_era5_hour
+post-gap,115,120,117.500,6043,-46.267,-45.778,49.787,sza,clara_minus_era5_hour
+post-gap,120,125,122.500,2140,-39.441,-39.944,58.999,sza,clara_minus_era5_hour
+post-gap,125,130,127.500,744,-38.180,-42.266,59.170,sza,clara_minus_era5_hour
+post-gap,130,135,132.500,248,-36.118,-53.226,67.008,sza,clara_minus_era5_hour
+pre-gap,45,50,47.500,47,-25.983,1.854,109.076,sza,clara_minus_era5_hour
+pre-gap,50,55,52.500,60,-22.691,-5.635,118.691,sza,clara_minus_era5_hour
+pre-gap,55,60,57.500,67,-24.828,2.747,101.820,sza,clara_minus_era5_hour
+pre-gap,60,65,62.500,38,32.426,52.102,82.627,sza,clara_minus_era5_hour
+pre-gap,65,70,67.500,50,30.742,46.671,88.063,sza,clara_minus_era5_hour
+pre-gap,70,75,72.500,47,24.385,40.040,86.613,sza,clara_minus_era5_hour
+pre-gap,75,80,77.500,57,26.407,31.374,66.688,sza,clara_minus_era5_hour
+pre-gap,80,85,82.500,99,20.750,8.594,81.576,sza,clara_minus_era5_hour
+pre-gap,85,90,87.500,231,15.410,2.340,81.224,sza,clara_minus_era5_hour
+pre-gap,90,95,92.500,505,1.392,-15.108,84.273,sza,clara_minus_era5_hour
+pre-gap,95,100,97.500,2111,-51.623,-58.019,66.527,sza,clara_minus_era5_hour
+pre-gap,100,105,102.500,7952,-72.152,-65.932,59.164,sza,clara_minus_era5_hour
+pre-gap,105,110,107.500,22014,-96.376,-100.346,49.412,sza,clara_minus_era5_hour
+pre-gap,110,115,112.500,28977,-86.927,-87.339,40.105,sza,clara_minus_era5_hour
+pre-gap,115,120,117.500,35631,-79.197,-75.511,40.332,sza,clara_minus_era5_hour
+pre-gap,120,125,122.500,45152,-76.315,-69.163,42.962,sza,clara_minus_era5_hour
+pre-gap,125,130,127.500,48328,-74.803,-66.268,45.049,sza,clara_minus_era5_hour
+pre-gap,130,135,132.500,34480,-69.063,-60.155,43.468,sza,clara_minus_era5_hour
+pre-gap,135,140,137.500,39734,-73.005,-63.580,45.639,sza,clara_minus_era5_hour
+pre-gap,140,145,142.500,27352,-72.996,-63.377,46.301,sza,clara_minus_era5_hour
+pre-gap,145,150,147.500,2242,-75.540,-65.482,44.539,sza,clara_minus_era5_hour
+pre-gap,150,155,152.500,63,-51.915,-43.424,35.007,sza,clara_minus_era5_hour
+post-gap,45,50,47.500,91,245.383,275.065,106.614,sza,clara
+post-gap,50,55,52.500,424,268.690,288.132,95.271,sza,clara
+post-gap,55,60,57.500,1186,275.736,293.032,88.125,sza,clara
+post-gap,60,65,62.500,3651,294.546,307.079,77.117,sza,clara
+post-gap,65,70,67.500,8514,286.824,291.399,64.755,sza,clara
+post-gap,70,75,72.500,12778,268.291,270.491,59.889,sza,clara
+post-gap,75,80,77.500,15022,250.629,254.157,58.794,sza,clara
+post-gap,80,85,82.500,15679,230.683,234.556,56.501,sza,clara
+post-gap,85,90,87.500,16054,210.853,212.995,57.542,sza,clara
+post-gap,90,95,92.500,16170,196.841,196.661,60.038,sza,clara
+post-gap,95,100,97.500,18580,186.106,183.594,64.346,sza,clara
+post-gap,100,105,102.500,20539,174.419,169.874,66.776,sza,clara
+post-gap,105,110,107.500,21993,165.781,160.073,61.344,sza,clara
+post-gap,110,115,112.500,15341,163.706,158.766,49.748,sza,clara
+post-gap,115,120,117.500,6043,161.460,152.886,48.249,sza,clara
+post-gap,120,125,122.500,2140,167.530,156.806,54.407,sza,clara
+post-gap,125,130,127.500,744,166.444,154.193,55.837,sza,clara
+post-gap,130,135,132.500,248,161.080,142.432,62.846,sza,clara
+pre-gap,45,50,47.500,47,230.539,271.144,102.243,sza,clara
+pre-gap,50,55,52.500,60,237.845,284.538,114.903,sza,clara
+pre-gap,55,60,57.500,67,239.286,288.785,102.436,sza,clara
+pre-gap,60,65,62.500,38,279.208,294.665,76.258,sza,clara
+pre-gap,65,70,67.500,50,264.023,283.885,81.253,sza,clara
+pre-gap,70,75,72.500,47,240.478,245.663,85.581,sza,clara
+pre-gap,75,80,77.500,57,235.874,243.703,68.781,sza,clara
+pre-gap,80,85,82.500,99,222.215,207.115,84.455,sza,clara
+pre-gap,85,90,87.500,231,210.704,201.888,85.683,sza,clara
+pre-gap,90,95,92.500,505,193.098,174.447,86.820,sza,clara
+pre-gap,95,100,97.500,2111,143.695,133.939,67.886,sza,clara
+pre-gap,100,105,102.500,7952,131.660,122.832,55.595,sza,clara
+pre-gap,105,110,107.500,22014,117.531,109.764,41.238,sza,clara
+pre-gap,110,115,112.500,28977,131.838,128.059,36.614,sza,clara
+pre-gap,115,120,117.500,35631,146.444,144.393,38.542,sza,clara
+pre-gap,120,125,122.500,45152,161.523,161.380,41.679,sza,clara
+pre-gap,125,130,127.500,48328,169.050,170.527,42.779,sza,clara
+pre-gap,130,135,132.500,34480,171.266,172.487,40.718,sza,clara
+pre-gap,135,140,137.500,39734,179.165,183.594,43.834,sza,clara
+pre-gap,140,145,142.500,27352,181.979,186.208,45.177,sza,clara
+pre-gap,145,150,147.500,2242,181.428,187.514,44.583,sza,clara
+pre-gap,150,155,152.500,63,193.612,192.741,36.722,sza,clara
+post-gap,0,5,2.500,109,-18.563,-26.165,33.563,vza (night),clara_minus_era5_night
+post-gap,5,10,7.500,600,-19.246,-19.728,40.517,vza (night),clara_minus_era5_night
+post-gap,10,15,12.500,1093,-18.239,-18.862,42.812,vza (night),clara_minus_era5_night
+post-gap,15,20,17.500,1502,-17.548,-19.436,45.423,vza (night),clara_minus_era5_night
+post-gap,20,25,22.500,1976,-17.836,-19.977,44.958,vza (night),clara_minus_era5_night
+post-gap,25,30,27.500,2354,-20.430,-23.223,48.135,vza (night),clara_minus_era5_night
+post-gap,30,35,32.500,2850,-21.231,-24.348,51.077,vza (night),clara_minus_era5_night
+post-gap,35,40,37.500,3337,-23.754,-28.918,54.830,vza (night),clara_minus_era5_night
+post-gap,40,45,42.500,3801,-27.815,-31.372,53.176,vza (night),clara_minus_era5_night
+post-gap,45,50,47.500,4316,-29.590,-33.120,55.704,vza (night),clara_minus_era5_night
+post-gap,50,55,52.500,4627,-33.636,-36.587,57.098,vza (night),clara_minus_era5_night
+post-gap,55,60,57.500,4879,-39.887,-41.905,56.151,vza (night),clara_minus_era5_night
+post-gap,60,65,62.500,5517,-44.160,-46.766,54.678,vza (night),clara_minus_era5_night
+post-gap,65,70,67.500,10299,-59.360,-58.110,44.511,vza (night),clara_minus_era5_night
+post-gap,70,75,72.500,11468,-90.567,-87.934,51.979,vza (night),clara_minus_era5_night
+post-gap,75,80,77.500,7031,-104.643,-110.841,58.269,vza (night),clara_minus_era5_night
+post-gap,80,85,82.500,1221,-100.473,-108.033,62.809,vza (night),clara_minus_era5_night
+post-gap,85,90,87.500,90,-88.128,-102.059,64.451,vza (night),clara_minus_era5_night
+pre-gap,20,25,22.500,38,-25.172,-22.361,56.938,vza (night),clara_minus_era5_night
+pre-gap,25,30,27.500,119,-46.300,-43.999,48.133,vza (night),clara_minus_era5_night
+pre-gap,30,35,32.500,809,-65.981,-59.368,44.297,vza (night),clara_minus_era5_night
+pre-gap,35,40,37.500,24424,-71.944,-62.535,45.618,vza (night),clara_minus_era5_night
+pre-gap,40,45,42.500,39635,-72.302,-62.781,45.568,vza (night),clara_minus_era5_night
+pre-gap,45,50,47.500,35847,-68.923,-60.044,43.299,vza (night),clara_minus_era5_night
+pre-gap,50,55,52.500,47145,-73.935,-65.143,44.604,vza (night),clara_minus_era5_night
+pre-gap,55,60,57.500,45950,-75.659,-68.608,42.855,vza (night),clara_minus_era5_night
+pre-gap,60,65,62.500,37218,-78.289,-74.496,41.085,vza (night),clara_minus_era5_night
+pre-gap,65,70,67.500,30046,-85.853,-86.149,40.380,vza (night),clara_minus_era5_night
+pre-gap,70,75,72.500,21933,-96.187,-100.090,48.761,vza (night),clara_minus_era5_night
+pre-gap,75,80,77.500,8075,-78.278,-71.245,56.163,vza (night),clara_minus_era5_night
+pre-gap,80,85,82.500,623,-73.883,-70.322,46.745,vza (night),clara_minus_era5_night
+post-gap,0,5,2.500,109,205.257,205.155,53.474,vza (night),clara
+post-gap,5,10,7.500,600,202.747,199.928,50.521,vza (night),clara
+post-gap,10,15,12.500,1093,198.401,194.048,52.079,vza (night),clara
+post-gap,15,20,17.500,1502,197.582,192.741,55.834,vza (night),clara
+post-gap,20,25,22.500,1976,197.124,194.701,54.664,vza (night),clara
+post-gap,25,30,27.500,2354,195.820,192.088,54.684,vza (night),clara
+post-gap,30,35,32.500,2850,196.544,192.088,56.085,vza (night),clara
+post-gap,35,40,37.500,3337,194.253,188.821,58.673,vza (night),clara
+post-gap,40,45,42.500,3801,190.723,184.901,57.218,vza (night),clara
+post-gap,45,50,47.500,4316,190.968,186.208,59.543,vza (night),clara
+post-gap,50,55,52.500,4627,187.280,181.634,59.580,vza (night),clara
+post-gap,55,60,57.500,4879,178.190,169.874,57.789,vza (night),clara
+post-gap,60,65,62.500,5517,169.256,158.766,57.404,vza (night),clara
+post-gap,65,70,67.500,10299,155.195,149.619,47.497,vza (night),clara
+post-gap,70,75,72.500,11468,140.928,133.939,51.269,vza (night),clara
+post-gap,75,80,77.500,7031,129.695,119.565,52.412,vza (night),clara
+post-gap,80,85,82.500,1221,137.688,128.712,54.710,vza (night),clara
+post-gap,85,90,87.500,90,135.391,118.258,61.050,vza (night),clara
+pre-gap,20,25,22.500,38,198.174,193.395,54.449,vza (night),clara
+pre-gap,25,30,27.500,119,191.660,192.088,46.688,vza (night),clara
+pre-gap,30,35,32.500,809,184.772,189.474,42.959,vza (night),clara
+pre-gap,35,40,37.500,24424,182.060,185.554,44.704,vza (night),clara
+pre-gap,40,45,42.500,39635,179.462,183.594,44.075,vza (night),clara
+pre-gap,45,50,47.500,35847,171.875,173.140,40.951,vza (night),clara
+pre-gap,50,55,52.500,47145,169.316,171.180,42.680,vza (night),clara
+pre-gap,55,60,57.500,45950,162.600,162.033,41.959,vza (night),clara
+pre-gap,60,65,62.500,37218,147.957,146.353,39.543,vza (night),clara
+pre-gap,65,70,67.500,30046,132.813,128.712,37.394,vza (night),clara
+pre-gap,70,75,72.500,21933,118.040,110.418,40.986,vza (night),clara
+pre-gap,75,80,77.500,8075,126.744,118.258,51.322,vza (night),clara
+pre-gap,80,85,82.500,623,127.685,124.138,49.525,vza (night),clara

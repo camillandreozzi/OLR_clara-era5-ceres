@@ -1,0 +1,67 @@
+# Configuration of the CLARA-from-ERA5 Gaussian-process pipeline.
+# Every script reads this file (src/config.py) and copies the settings it used into its outputs.
+# Physical thresholds are instrument physics, chosen from the EDA diagnostics, never tuned for skill.
+
+[qc]
+# On top of read_in's earth_view & in_range (OLR in [50 (75 from 2024), 400] W m-2):
+night_sza_min = 100.0   # deg, footprint solar zenith angle; CLARA measures OLR on the night side only
+vza_max = 60.0          # deg, viewing zenith angle at the footprint; larger angles see a colder limb path
+overpass_gap_min = 20.0 # min, a gap longer than this starts a new overpass (orbit period ~96 min)
+
+[grid]
+res_deg = 1             # model grid spacing (deg); user choice after the 1 deg feasibility test
+
+[era5]
+night_sza_min = 100.0   # deg, same night definition as the CLARA QC
+smoothing_radii_km = [0.0, 300.0, 600.0, 1000.0, 1500.0]  # spherical-cap radii; EDA: optimum near 1000 km
+
+[time]
+origin = "2020-01-01"   # t = 0 of the long-term time coordinate (years)
+first_month = "2020-01"
+last_month = "2026-09"
+gap_start = "2021-09"   # CLARA data gap; pre/post-gap labels are used for reporting only, never as a predictor
+gap_end = "2022-05"
+
+[gp]
+kernels = ["exponential", "gaussian", "matern32"]
+n_inducing = 500       # 1 deg feasibility test: M = 500 keeps ~150 fits within ~10 h
+restarts = 1           # one fixed start for every kernel and fold (compute budget at 1 deg)
+max_iter = 200
+seed = 20261022
+jitter = 1e-6
+threads = 3            # three kernels run in parallel
+chunk_size = 20000     # rows per chunk of the checkpointed VFE bound (memory O(M x chunk))
+# Data-independent initial values (physical units), shared by every kernel and fold.
+init_sigma_A = 15.0       # W m-2, space x season component
+init_sigma_B = 15.0       # W m-2, space x long-term component
+init_ell_space_A_km = 2000.0
+init_ell_season_days = 60.0
+init_ell_space_B_km = 4000.0
+init_ell_time_years = 1.0
+init_sigma0 = 15.0        # W m-2, irreducible noise
+init_sigma1 = 30.0        # W m-2, per-overpass sampling noise
+
+[cv]
+# Block sizes and buffers are set from the EDA residual correlation scales (results/eda/summary.md).
+spatial_block_lat = 60.0
+spatial_block_lon = 60.0
+spatial_buffer_km = 1500.0   # >= fitted residual range (1,056 km) rounded up to 500 km; results/eda/summary.md
+temporal_window_months = 6
+temporal_buffer_months = 1
+joint_block_lat = 60.0
+joint_block_lon = 60.0
+joint_window_months = 6
+joint_buffer_km = 1500.0
+joint_buffer_months = 1
+joint_n_folds = 18
+bootstrap_samples = 2000
+
+[baselines]
+# Baselines scored on the same CV folds as the kernels (src/baselines.py; run_cv.py --model, --group baselines).
+# The regression-only models (linear, linear_noera5) always run. The GP without ERA5 uses the winning kernel:
+# set this to the first row of results/model/kernel_comparison.csv once the kernel CV has finished.
+gp_noera5_kernels = []
+
+[maps]
+min_months_per_year = 6     # a year gets maps when at least this many months ...
+min_cells_per_month = 100   # ... have at least this many observed cell-months

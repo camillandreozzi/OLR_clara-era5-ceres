@@ -1,0 +1,7 @@
+stage,samples,fraction_of_usable
+all samples,3561328,7.568999925613424
+geolocated,2806850,5.965484628545317
+Earth viewing,632046,1.3433068021210801
+Earth viewing & in range (read_in usable),470515,1.0
++ night side (SZA > 100 deg),358995,0.7629831142471547
++ VZA <= 60 deg (model observations),225460,0.4791770719318194
