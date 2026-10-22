@@ -1,0 +1,4 @@
+cv_type,model,vs,mean_rmse_diff,ci95_lo,ci95_hi,folds,distinguishable
+spatial,linear_noera5,linear,3.3833,2.4883,4.3840,18,True
+temporal,linear_noera5,linear,2.8398,1.8642,3.8064,13,True
+joint,linear_noera5,linear,2.8692,1.0040,4.6832,18,True

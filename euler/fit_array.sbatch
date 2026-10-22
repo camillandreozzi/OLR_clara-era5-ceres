@@ -7,8 +7,9 @@
 #SBATCH --output=logs/fit_%A_%a.out
 # One GP fit per array task: tasks 0-2 are the full-data fits, the rest one kernel on one CV fold
 # (python src/run_cv.py --list-tasks). Finished fits are skipped, so the array can simply be resubmitted.
+# GROUP=baselines selects the task list of the GPs without ERA5 (euler/submit_baselines.sh); default: kernels.
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 source euler/modules.sh
 source "$VENV/bin/activate"
-python src/run_cv.py --config "$CFG" --task-index "$SLURM_ARRAY_TASK_ID" --verbose
+python src/run_cv.py --config "$CFG" --task-index "$SLURM_ARRAY_TASK_ID" --group "${GROUP:-kernels}" --verbose

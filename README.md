@@ -191,6 +191,7 @@ All commands run from the repository root.
 | `[time]` | Record span, time origin, CLARA data gap (reporting only) |
 | `[gp]` | Kernels, inducing inputs, optimiser, initial hyperparameters, chunk size |
 | `[cv]` | Block sizes, windows and buffers of the three CV types; bootstrap samples |
+| `[baselines]` | `gp_noera5_kernels`: the kernel of the GP without ERA5 (set to the winner once the kernel CV is done) |
 | `[maps]` | Which years get maps |
 
 Each script copies the settings it used next to its outputs (`config_used.json`, `config.json`).
@@ -219,7 +220,15 @@ for k in exponential gaussian matern32; do               # the three kernels can
 done
 python src/run_cv.py --summarise
 
-# 5 · Map the winning kernel
+# 5 · Ablation on the same folds (--model accepts several ids; --kernel is an alias)
+python src/run_cv.py --model linear linear_noera5        # regression only: seconds per fold
+python src/run_cv.py --model linear linear_noera5 --full
+# set [baselines] gp_noera5_kernels = ["<winner>"], the first row of kernel_comparison.csv, then:
+python src/run_cv.py --model <winner>_noera5             # the GP without ERA5
+python src/run_cv.py --model <winner>_noera5 --full
+python src/run_cv.py --summarise                         # adds model_comparison.csv, model_pairwise.csv
+
+# 6 · Map the winning kernel
 python src/predict_maps.py                               # winner read from kernel_comparison.csv
 python src/report.py
 ```
@@ -234,8 +243,9 @@ run the modelling stages on the smoke-test configuration, pass `--config config/
 python -m pytest tests/
 ```
 
-The tests cover preprocessing, fold construction and the GP. One check: with the inducing inputs equal to
-the training inputs, the VFE bound equals the exact log marginal likelihood.
+The tests cover preprocessing, fold construction, the GP and the baselines. One check: with the inducing
+inputs equal to the training inputs, the VFE bound equals the exact log marginal likelihood. Another: the
+models without ERA5 give identical predictions whether ERA5 is supplied or all-NaN.
 
 ## Running on Euler (ETH cluster)
 
@@ -254,6 +264,18 @@ Finished fits are skipped, so `sbatch --array=<ids> euler/fit_array.sbatch` reru
 [`euler/modules.sh`](euler/modules.sh). The maps and the report run locally after copying `results/model/`
 back.
 
+**Baselines (stage 5).** These use a separate task list (`--group baselines`) and separate output folders.
+The kernel array's task indices never change, so the code can be synced while that array is still running.
+
+```bash
+bash euler/submit_baselines.sh   # now: regression-only baselines (one small job) -> summary
+# after the kernel summary: set [baselines] gp_noera5_kernels = ["<winner>"] in pipeline_euler.toml, then
+bash euler/submit_baselines.sh   # adds the 50 fits of the GP without ERA5 (array, GROUP=baselines)
+```
+
+Failed GP-without-ERA5 tasks rerun with `GROUP=baselines sbatch --array=<ids> euler/fit_array.sbatch`.
+`results/model/missing_baseline_tasks.csv` lists them.
+
 ## Outputs
 
 | Path | Content |
@@ -265,7 +287,9 @@ back.
 | `results/model/benchmark/` | Sparse (VFE) vs exact GP, M sensitivity |
 | `results/model/<kernel>/` | Out-of-sample and in-sample predictions, hyperparameters, metrics, `full_model.pt` |
 | `results/model/kernel_comparison.csv` | Kernel ranking; `kernel_pairwise.csv` gives bootstrap CIs of the RMSE differences |
-| `results/model/figures/` | RMSE by fold, coverage, PIT histograms |
+| `results/model/linear/`, `linear_noera5/`, `<winner>_noera5/` | The baselines, with the same files as a kernel folder |
+| `results/model/model_comparison.csv` | All models (kernels and baselines) on the same folds; `model_pairwise.csv` gives bootstrap CIs for every pair |
+| `results/model/figures/` | RMSE by fold, coverage, PIT histograms; `model_comparison.png` (kernels and baselines) |
 | `results/model/<winner>/<yyyy>/` | Monthly maps (observed, predicted, uncertainty, residuals), `<yyyy>_predictions.nc`, monthly CSVs |
 | `results/model/<winner>/global_mean_monthly.*` | Area-weighted global mean with variance from the full posterior covariance |
 | `results/report/report.md` | Final report |

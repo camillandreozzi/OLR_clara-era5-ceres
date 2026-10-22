@@ -60,6 +60,9 @@
     "joint_n_folds": 18,
     "bootstrap_samples": 2000
   },
+  "baselines": {
+    "gp_noera5_kernels": []
+  },
   "maps": {
     "min_months_per_year": 6,
     "min_cells_per_month": 100

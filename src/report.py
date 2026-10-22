@@ -109,7 +109,7 @@ def baseline_section(winner):
     score = lambda m: mc.primary_score.get(m, np.nan)
     grid = pd.DataFrame({"with ERA5": [score(winner), score("linear")],
                          "without ERA5": [score(noera5), score("linear_noera5")]},
-                        index=[f"GP ({KERNEL_LABELS[winner]})", "regression only (no kernel)"])
+                        index=pd.Index([f"GP ({KERNEL_LABELS[winner]})", "regression only (no kernel)"], name="model"))
     cols = ["primary_score", "mean_fold_rmse_spatial", "mean_fold_rmse_temporal", "mean_fold_rmse_joint",
             "mean_fold_r2", "mean_fold_cover95", "mean_fold_crps"]
     t = mc.loc[[m for m in (winner, noera5) + LINEAR if m in mc.index], cols].reset_index()
