@@ -8,11 +8,17 @@ onto the CERES grid), weighted by cos(lat); all three are normalised to a probab
 The raw OLR is quantised in steps of OLR_STEP, so each bin spans a whole number of steps, centred on
 them; otherwise neighbouring bins would alternately hold more and fewer possible values.
 
+The comparison is also drawn standardised: each dataset as z = (OLR - mean) / std, with its own
+(weighted) mean and std over the values in that figure, so the shapes can be compared independently of
+units, offset and scale (CLARA's .save files carry no unit). The legend gives each mean +- std in W m-2.
+
 Output:
     results/olr_hist/olr_hist_all.png
     results/olr_hist/olr_hist_<yyyy>.png
     results/olr_hist/era5_ceres_clara/olr_hist_all.png
     results/olr_hist/era5_ceres_clara/olr_hist_<yyyy>.png
+    results/olr_hist/era5_ceres_clara_normalised/olr_hist_all.png
+    results/olr_hist/era5_ceres_clara_normalised/olr_hist_<yyyy>.png
 
 Usage:
     python src/plot_olr_hist.py
@@ -31,6 +37,7 @@ OLR_LO, OLR_HI = 0.0, 500.0  # W m-2, samples kept
 OLR_STEP = 0.65336  # W m-2, quantisation of the raw OLR (values are whole multiples of it)
 STEPS_PER_BIN = 8  # bin width = 8 steps ~ 5.2 W m-2
 BINS = (np.arange(0, OLR_HI / OLR_STEP + STEPS_PER_BIN, STEPS_PER_BIN) - 0.5) * OLR_STEP
+Z_BINS = np.linspace(-5, 5, 101)  # standardised OLR, 0.1 std per bin
 
 
 def plot(olr, title, path):
@@ -43,15 +50,34 @@ def plot(olr, title, path):
     plt.close(fig)
 
 
-def plot_compare(series, title, path):
-    """series: {label: (values, weights or None)}, drawn as density step histograms on one axis."""
+def standardise(values, weights=None):
+    """Return ((values - mean) / std, mean, std) with the (weighted) mean and std of values."""
+    mean = np.average(values, weights=weights)
+    std = np.sqrt(np.average((values - mean) ** 2, weights=weights))
+    return (values - mean) / std, mean, std
+
+
+def plot_compare(series, title, path, normalised=False):
+    """series: {label: (values, weights or None)}, drawn as density step histograms on one axis.
+
+    normalised=True standardises each series (see standardise) and plots z instead of W m-2.
+    """
     fig, ax = plt.subplots(figsize=(9, 5), layout="constrained")
     for label, (values, weights) in series.items():
-        ax.hist(values, bins=BINS, weights=weights, density=True, histtype="step", lw=1.5, label=label)
+        if normalised:
+            values, mean, std = standardise(values, weights)
+            label = f"{label}: {mean:.1f} ± {std:.1f} W m$^{{-2}}$"
+        ax.hist(values, bins=Z_BINS if normalised else BINS, weights=weights, density=True,
+                histtype="step", lw=1.5, label=label)
     ax.set_title(title)
-    ax.set_xlabel("OLR (W m$^{-2}$)")
-    ax.set_ylabel("probability density (per W m$^{-2}$)")
-    fig.legend(loc="outside lower center", ncol=len(series), frameon=False)
+    if normalised:
+        ax.set_xlabel("standardised OLR, (OLR − mean) / std")
+        ax.set_ylabel("probability density (per std)")
+    else:
+        ax.set_xlabel("OLR (W m$^{-2}$)")
+        ax.set_ylabel("probability density (per W m$^{-2}$)")
+    long = max(len(label) for label in ax.get_legend_handles_labels()[1]) > 40  # stack long labels
+    fig.legend(loc="outside lower center", ncol=1 if long else len(series), frameon=False)
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
@@ -71,18 +97,19 @@ def compare(clara):
     gridded = {"ERA5": grid_values(read_in.era5_to_ceres_grid(read_in.read_era5("monthly"))),
                "CERES EBAF": grid_values(read_in.read_ceres())}
     points = {"CLARA Earth viewing": (clara.olr.to_numpy(), None, clara.time.dt.year.to_numpy())} | gridded
-    out_dir = RESULTS_DIR / "olr_hist" / "era5_ceres_clara"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
     span = lambda y: f"{y.min()}-{y.max()}" if y.min() != y.max() else f"{y.min()}"
-    plot_compare({f"{k} ({span(y)})": (v, w) for k, (v, w, y) in points.items()},
-                 "OLR, all years", out_dir / "olr_hist_all.png")
     years = sorted(set().union(*(np.unique(y) for _, _, y in points.values())))
-    for year in years:
-        series = {k: (v[y == year], None if w is None else w[y == year])
-                  for k, (v, w, y) in points.items() if (y == year).any()}
-        plot_compare(series, f"OLR, {year}", out_dir / f"olr_hist_{year}.png")
-    print(f"wrote {1 + len(years)} figures to {out_dir}")
+    for folder, normalised, prefix in (("era5_ceres_clara", False, "OLR"),
+                                       ("era5_ceres_clara_normalised", True, "Standardised OLR")):
+        out_dir = RESULTS_DIR / "olr_hist" / folder
+        out_dir.mkdir(parents=True, exist_ok=True)
+        plot_compare({f"{k} ({span(y)})": (v, w) for k, (v, w, y) in points.items()},
+                     f"{prefix}, all years", out_dir / "olr_hist_all.png", normalised)
+        for year in years:
+            series = {k: (v[y == year], None if w is None else w[y == year])
+                      for k, (v, w, y) in points.items() if (y == year).any()}
+            plot_compare(series, f"{prefix}, {year}", out_dir / f"olr_hist_{year}.png", normalised)
+        print(f"wrote {1 + len(years)} figures to {out_dir}")
 
 
 def main():

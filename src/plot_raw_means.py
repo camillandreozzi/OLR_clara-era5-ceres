@@ -1,7 +1,7 @@
 """Side-by-side maps of the raw mean OLR from CLARA, CERES EBAF and ERA5, per month and per year.
 
 All three are put on a common res x res deg grid in W m-2, positive upward:
-    CLARA  Earth-viewing samples within [OLR_MIN, OLR_MAX] (read_in.read_clara), binned by footprint
+    CLARA  Earth-viewing samples within [OLR_MIN, OLR_MAX] (OLR_MIN raised per OLR_MIN_FROM) (read_in.read_clara), binned by footprint
            location; each cell is the mean of all samples that fell in it during the period.
     CERES  toa_lw_all_mon is already a monthly mean flux in W m-2; only area-averaged to the grid.
     ERA5   ttr is an accumulation in J m-2, negative upward; monthly means of daily accumulations are

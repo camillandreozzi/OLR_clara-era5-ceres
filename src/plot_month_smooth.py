@@ -1,18 +1,21 @@
 """Compare the matched monthly means of CLARA, CERES EBAF and ERA5, on the cells CLARA sampled only.
 
 The fields are those of build_matched.py: per res x res deg cell and month, the mean of the CLARA
-Earth-viewing samples within [OLR_MIN, OLR_MAX], and the CERES / ERA5 monthly means of that cell.
+Earth-viewing samples within [OLR_MIN, OLR_MAX] (OLR_MIN raised per OLR_MIN_FROM), and the CERES / ERA5 monthly means of that cell.
 CERES and ERA5 are blanked wherever CLARA has no sample that month, so all three panels and
 histograms cover the same cell-months.
 
 Maps        side by side CLARA | CERES EBAF | ERA5, one figure per month
 Histograms  as in plot_olr_hist.py (era5_ceres_clara): density step histograms of the cell values,
             overall and per year. All three are weighted by cos(lat), as they are now cell means.
+            Drawn in W m-2 and standardised (z = (OLR - mean) / std per dataset and figure, so shapes
+            compare independently of units, offset and scale).
 
 Output, <res> in the file names:
     results/month_smooth_comparison/<yyyy>/comparison_<yyyy>-<mm>_<res>deg.png
     results/month_smooth_comparison/histograms/olr_hist_all_<res>deg.png
     results/month_smooth_comparison/histograms/olr_hist_<yyyy>_<res>deg.png
+    results/month_smooth_comparison/histograms_normalised/olr_hist_all_<res>deg.png, olr_hist_<yyyy>_<res>deg.png
 
 Usage:
     python src/plot_month_smooth.py            # 1 deg (CERES native) and 5 x 5 deg
@@ -52,16 +55,19 @@ def maps(datasets, res):
 
 def histograms(datasets, res):
     points = {name: grid_values(ds) for name, ds in datasets.items()}
-    out_dir = OUT_DIR / "histograms"
-    out_dir.mkdir(parents=True, exist_ok=True)
     grid = f"{res}° cell monthly means on CLARA cells"
-    plot_compare({k: (v, w) for k, (v, w, _) in points.items()},
-                 f"OLR, all years ({grid})", out_dir / f"olr_hist_all_{res}deg.png")
     years = np.unique(points["CLARA"][2])
-    for year in years:
-        series = {k: (v[y == year], w[y == year]) for k, (v, w, y) in points.items() if (y == year).any()}
-        plot_compare(series, f"OLR, {year} ({grid})", out_dir / f"olr_hist_{year}_{res}deg.png")
-    print(f"wrote {1 + len(years)} histograms to {out_dir}")
+    for folder, normalised, prefix in (("histograms", False, "OLR"),
+                                       ("histograms_normalised", True, "Standardised OLR")):
+        out_dir = OUT_DIR / folder
+        out_dir.mkdir(parents=True, exist_ok=True)
+        plot_compare({k: (v, w) for k, (v, w, _) in points.items()},
+                     f"{prefix}, all years ({grid})", out_dir / f"olr_hist_all_{res}deg.png", normalised)
+        for year in years:
+            series = {k: (v[y == year], w[y == year]) for k, (v, w, y) in points.items() if (y == year).any()}
+            plot_compare(series, f"{prefix}, {year} ({grid})", out_dir / f"olr_hist_{year}_{res}deg.png",
+                         normalised)
+        print(f"wrote {1 + len(years)} histograms to {out_dir}")
 
 
 def main():

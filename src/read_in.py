@@ -52,7 +52,9 @@ EXTRACT_DIR = CLARA_DIR / "extracted"
 JULIAN_UNIX_EPOCH = 2440587.5  # Julian date of 1970-01-01T00:00Z
 
 # Plausible range for Earth-viewing OLR in W m-2; samples outside it get in_range=False.
+# The lower limit is OLR_MIN, raised from the years in OLR_MIN_FROM on ({first year: limit}).
 OLR_MIN = 50.0
+OLR_MIN_FROM = {2024: 75.0, 2025: 90.0}
 OLR_MAX = 400.0
 
 # Maximum spacing between two geolocation rows that may be interpolated between (rows are 1 min apart).
@@ -225,7 +227,7 @@ def geolocate(olr, geo):
         for col in ("z_angle", "sat_lat", "sat_lon", "sat_alt", "clara_lat", "clara_lon", "vza"):
             out[col] = np.nan
         out["earth_view"] = False
-        out["in_range"] = out["olr"].between(OLR_MIN, OLR_MAX)
+        out["in_range"] = in_range(out["olr"], out["time"])
         return out
     tg = geo["time"].to_numpy("datetime64[ns]").astype(np.int64)
     to = olr["time"].to_numpy("datetime64[ns]").astype(np.int64)
@@ -253,8 +255,22 @@ def geolocate(olr, geo):
     out["clara_lat"], out["clara_lon"] = lerp_latlon("clara")
     out["vza"] = lerp("vza")
     out["earth_view"] = ok & ev[left] & ev[right]
-    out["in_range"] = out["olr"].between(OLR_MIN, OLR_MAX)
+    out["in_range"] = in_range(out["olr"], out["time"])
     return out
+
+
+def olr_min(time):
+    """Lower in_range limit (W m-2) for each sample time: OLR_MIN, raised per OLR_MIN_FROM."""
+    year = time.dt.year.to_numpy()
+    lo = np.full(year.shape, OLR_MIN)
+    for first, limit in sorted(OLR_MIN_FROM.items()):
+        lo[year >= first] = limit
+    return lo
+
+
+def in_range(olr, time):
+    """True where olr lies within [olr_min(time), OLR_MAX]."""
+    return (olr >= olr_min(time)) & (olr <= OLR_MAX)
 
 
 def read_clara(years=None, raw_footprint=False):
@@ -409,7 +425,8 @@ def _summarise_clara(df):
     good = df[df.earth_view & df.in_range]
     print(f"CLARA: {len(df):,} samples {df.time.min():%Y-%m-%d} -> {df.time.max():%Y-%m-%d}; "
           f"{df.earth_view.sum():,} Earth-viewing, {len(good):,} Earth-viewing within "
-          f"[{OLR_MIN:g}, {OLR_MAX:g}] W m-2 (mean {good.olr.mean():.1f})")
+          f"[{OLR_MIN:g} ({', '.join(f'{v:g} from {y}' for y, v in sorted(OLR_MIN_FROM.items()))}), {OLR_MAX:g}] W m-2 "
+          f"(mean {good.olr.mean():.1f})")
     per_month = good.groupby(good.time.dt.to_period("M")).olr.agg(["size", "mean"])
     all_months = pd.period_range(df.time.min(), df.time.max(), freq="M")
     missing = [str(p) for p in all_months if p not in per_month.index]

@@ -1,7 +1,7 @@
 """Correlation between the CLARA, CERES EBAF and ERA5 monthly OLR fields, in three steps.
 
 All three are put on a common res x res deg monthly grid exactly as in plot_raw_means.py (CLARA
-Earth-viewing samples within [OLR_MIN, OLR_MAX] binned by footprint; CERES and ERA5 area-averaged).
+Earth-viewing samples within [OLR_MIN, OLR_MAX] (OLR_MIN raised per OLR_MIN_FROM) binned by footprint; CERES and ERA5 area-averaged).
 CLARA samples are further limited to a viewing zenith angle of at most --max-vza (default 75 deg), as
 near-limb views see a long slant path through the colder upper atmosphere. A CLARA cell-month is used when it holds at least --min-samples samples. Three pairs are compared,
 each as y against x (bias = y - x):
@@ -59,7 +59,7 @@ MIN_MONTHS_YEAR = 6  # ... and for a cell's correlation within one year
 MIN_CELLS = 20  # cells needed for a month's pattern correlation and for a correlation map's mean
 P_SIG = 0.05
 MAX_VZA = 75.0  # deg, default CLARA viewing zenith angle limit
-LIMS = (40, 400)  # W m-2, scatter axes; CLARA is kept within [50, 400]
+LIMS = (40, 400)  # W m-2, scatter axes; CLARA is kept within [50 (75 in 2024, 90 from 2025), 400]
 
 # Diverging blue (positive r) <-> red (negative r) around a neutral grey midpoint.
 CORR_CMAP = LinearSegmentedColormap.from_list("corr", [
