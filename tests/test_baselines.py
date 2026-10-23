@@ -33,7 +33,7 @@ def linear_fit():
 
 def test_linear_recovers_mean_and_noise(linear_fit):
     model, _ = linear_fit
-    b0, b1 = model.coefficients()
+    b0, b1, b2 = model.coefficients()
     hp = model.hyperparameters()
     assert b1 == pytest.approx(0.8, abs=0.02) and b0 == pytest.approx(20, abs=3)
     assert hp["sigma0_wm2"] == pytest.approx(np.sqrt(3 ** 2 + 2 ** 2 / 2), rel=0.15)  # + the unmodelled sine
@@ -45,7 +45,7 @@ def test_linear_coefficients_are_gls_at_fitted_noise(linear_fit):
     hp = model.hyperparameters()
     sw = 1 / np.sqrt(hp["sigma0_wm2"] ** 2 + hp["sigma1_wm2"] ** 2 / n)
     beta = np.linalg.lstsq(np.column_stack([np.ones(len(e)), e]) * sw[:, None], y * sw, rcond=None)[0]
-    assert np.allclose(model.coefficients(), beta, rtol=1e-8)
+    assert np.allclose(model.coefficients()[:2], beta, rtol=1e-8) and model.coefficients()[2] == 0.0
 
 
 def test_linear_prediction_and_training_statistics(linear_fit):
@@ -114,3 +114,31 @@ def test_kernel_task_list_unchanged_by_baselines():
     tasks = run_cv.task_list(with_b, folds, "baselines")
     assert tasks[0] == ("gaussian_noera5", "full", -1) and {m for m, _, _ in tasks} == {"gaussian_noera5"}
     assert len(tasks) == 5
+
+
+def test_linear_gap_step_is_gls():
+    x, y, e, n = synthetic(20000, seed=4)
+    s = (np.arange(len(y)) % 3 == 0).astype(float)
+    y = y + 40 * s
+    cfg = dict(CFG_GP, gap_step=True)
+    model = baselines.LinearModel(cfg).fit(x, y, e, n, s=s)
+    b0, b1, b2 = model.coefficients()
+    assert b2 == pytest.approx(40, abs=0.5) and b1 == pytest.approx(0.8, abs=0.02)
+    hp = model.hyperparameters()
+    assert hp["beta2_wm2"] == b2
+    sw = 1 / np.sqrt(hp["sigma0_wm2"] ** 2 + hp["sigma1_wm2"] ** 2 / n)
+    beta = np.linalg.lstsq(np.column_stack([np.ones(len(e)), e, s]) * sw[:, None], y * sw, rcond=None)[0]
+    assert np.allclose(model.coefficients(), beta, rtol=1e-8)
+    with pytest.raises(ValueError):
+        model.predict(x[:5], e[:5], n[:5])
+    pre, post = (model.predict(x[:20], e[:20], n[:20], s=np.full(20, v)) for v in (0.0, 1.0))
+    assert np.allclose(post["mean"] - pre["mean"], b2)
+    back = baselines.LinearModel.from_state(model.state())
+    assert np.allclose(back.predict(x[:20], e[:20], n[:20], s=s[:20])["mean"],
+                       model.predict(x[:20], e[:20], n[:20], s=s[:20])["mean"])
+    const = baselines.make("linear_noera5", cfg).fit(x, y, np.full(len(y), np.nan), n, s=s)
+    assert const.coefficients()[1] == 0.0 and const.coefficients()[2] == pytest.approx(40, abs=1.5)
+    for model_id in ("linear", "matern32"):  # one regime only: beta2 is not identifiable
+        z = gp.inducing_inputs(x[:300], 20, CFG_GP, 0) if model_id == "matern32" else None
+        with pytest.raises(ValueError, match="not identifiable"):
+            baselines.make(model_id, cfg, z).fit(x[:300], y[:300], e[:300], n[:300], s=np.ones(300))

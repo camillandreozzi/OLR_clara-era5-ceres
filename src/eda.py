@@ -720,8 +720,9 @@ def summary(ph, rs, sp, tp, st, obs, m):
         f"2. Keep only night-side, VZA ≤ {vza_max:g}° samples. Aggregate to cell-month means and carry the number of "
         "overpasses into the noise model, because samples on one overpass are not independent.",
         "3. Expect a large, period-dependent offset and a slope well below 1 (CLARA's spatial contrasts are damped). "
-        "ERA5 enters through a linear mean function. The long-term time component of the GP must absorb the step "
-        "across the gap; by decision there is no step term.",
+        "ERA5 enters through a linear mean function. The step across the gap enters the mean function as a "
+        "post-gap indicator (β₂, gp.gap_step; the gap months count as post-gap); the long-term time component of "
+        "the GP absorbs the remaining drift.",
         "4. The structured CLARA–ERA5 discrepancy has a ~10³ km range and little month-to-month memory. Sampling noise "
         "dominates single cell-months, so gains from the GP's covariance over the mean function are expected mainly "
         "near observed data. Blocked CV with buffers is essential to measure this honestly.",

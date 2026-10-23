@@ -69,7 +69,8 @@ def status_table():
     comp = read(R / "model/kernel_comparison.csv")
     if comp is not None:
         w = comp.kernel.iloc[0]
-        items += [(f"Monthly maps ({w})", R / f"model/{w}/global_mean_monthly.csv")]
+        items += [(f"Monthly maps ({w})", R / f"model/{w}/global_mean_monthly.csv"),
+                  (f"Whole-grid predictions ({w})", R / f"model/{w}/grid_predictions.csv")]
     for m in LINEAR + ((f"{w}_noera5",) if comp is not None else ()):
         items.append((f"Baseline {m} (CV metrics)", R / f"model/{m}/metrics_summary.csv"))
     items.append(("Model comparison (kernels and baselines)", R / "model/model_comparison.csv"))
@@ -99,8 +100,9 @@ def baseline_section(winner):
     noera5 = f"{winner}_noera5"
     lines = ["### What the kernel and ERA5 each add (baselines)",
              "The winner is compared on the same folds with three baselines: the same model without the GP kernel "
-             "(regression only, β₀ + β₁·ERA5 with the same noise model), without ERA5 (the GP with a constant mean) "
-             "and without both (a constant). Values are the primary score (W m⁻², lower is better).", ""]
+             "(regression only, β₀ + β₁·ERA5 + β₂·post-gap with the same noise model), without ERA5 (the GP with "
+             "mean β₀ + β₂·post-gap) and without both (a constant per period, β₀ + β₂·post-gap). Values are the "
+             "primary score (W m⁻², lower is better).", ""]
     mc = read(R / "model/model_comparison.csv")
     if mc is None or not mc.model.isin(LINEAR).any():
         return lines + ["**Not available: the baselines have not been run yet** (`run_cv.py --model linear "
@@ -203,7 +205,8 @@ def main():
         lines += ["## 4. How much of CLARA's variability do the GPs explain?",
                   "Out-of-sample R² is the share of the held-out cell-months' variance explained (pooled over the "
                   "held-out blocks of each validation type). `R² mean function` is the same fitted GP's mean function "
-                  "alone (β₀ + β₁·ERA5), so the gap between the two is what the spatio-temporal covariance adds.", ""]
+                  "alone (β₀ + β₁·ERA5 + β₂·post-gap), so the gap between the two is what the spatio-temporal "
+                  "covariance adds.", ""]
         rows = []
         for k in KERNELS:
             s = summ[k]
@@ -262,6 +265,7 @@ def main():
                 continue
             h = h.iloc[0]
             hrows.append({"kernel": KERNEL_LABELS[k], "β₀ (W m⁻²)": h.beta0_wm2, "β₁": h.beta1,
+                          "β₂ post-gap (W m⁻²)": h.get("beta2_wm2", np.nan),
                           "σ_A": h.sigma_A_wm2, "ℓ_space,A (km)": h.ell_space_A_km, "ℓ_season (days)": h.ell_season_days,
                           "σ_B": h.sigma_B_wm2, "ℓ_space,B (km)": h.ell_space_B_km, "ℓ_time (years)": h.ell_time_years,
                           "σ₀": h.sigma0_wm2, "σ₁ (per overpass)": h.sigma1_wm2, "ERA5 R (km)": h.era5_radius_km})
@@ -269,10 +273,13 @@ def main():
                   "How to read them:",
                   "- **β₁** is how many W m⁻² CLARA changes per W m⁻² of night-time ERA5. Values well below 1 match the "
                   "damped spatial contrasts seen in the EDA.",
+                  "- **β₂** is the calibration step: the change in CLARA's level from the start of the 2021-09 → "
+                  "2022-05 gap on, at fixed ERA5. β₀ is the pre-gap intercept and β₀ + β₂ the post-gap one.",
                   "- **Component A** (space × season) is the recurring, seasonal CLARA–ERA5 discrepancy. ℓ_space,A is "
                   "its horizontal scale; ℓ_season is how quickly the pattern changes through the year.",
-                  "- **Component B** (space × long-term time) absorbs drift and the calibration step across the "
-                  "2021–22 gap. A short ℓ_time and a large σ_B mean the model needs non-recurring temporal flexibility.",
+                  "- **Component B** (space × long-term time) absorbs drift beyond the step, and any regional "
+                  "structure of the step. A short ℓ_time and a large σ_B mean the model needs non-recurring temporal "
+                  "flexibility.",
                   "- **σ₀ and σ₁** are the noise: σ₀ is irreducible discrepancy (residual geometry effects, weather the "
                   "monthly ERA5 cannot see); σ₁/√n is the sampling error of a cell-month mean from n overpasses.",
                   f"- Per-fold estimates (spread across blocks): `results/model/<kernel>/hyperparameters_<cv_type>.csv`.",
@@ -322,7 +329,8 @@ def main():
                       md(by_band.to_frame(), "{:.2f}", index=True), "",
                       "Months with the largest median latent SD (typically CLARA gaps and sparse months, where the "
                       "prediction relies on ERA5 and extrapolation in time):", "", md(top, "{:.2f}"), "",
-                      f"Monthly maps: `results/model/{winner}/<yyyy>/`; global mean with full-covariance uncertainty: "
+                      f"Monthly maps: `results/model/{winner}/<yyyy>/`; every cell of every month in one table: "
+                      f"`results/model/{winner}/grid_predictions.csv`; global mean with full-covariance uncertainty: "
                       f"[{rel(R / f'model/{winner}/global_mean_monthly.png')}]({rel(R / f'model/{winner}/global_mean_monthly.png')}).",
                       ""]
         else:
@@ -345,9 +353,11 @@ def main():
     else:
         exact_note = "The approximation was not compared with the exact GP; "
     lines += ["## 9. Limitations",
-              "- **Calibration step.** By decision there is no step term. The long-term component must model a ~40 W m⁻² "
-              "calibration change inside the 2021-09 → 2022-05 gap. Predictions in and next to the gap, and temporal "
-              "CV blocks spanning it, carry that burden; ERA5 cannot explain it.",
+              "- **Calibration step.** The ~40 W m⁻² calibration change inside the 2021-09 → 2022-05 gap enters the "
+              "mean function as one global offset β₂ from 2021-09 on. When in the gap it happened is unknown: by "
+              "convention the gap months take the post-gap level, so the maps of those months (never observed) are "
+              "extrapolation, and their uncertainty does not include the timing of the step. A step that differs "
+              "between regions is left to the long-term GP component.",
               "- **Geometry.** CLARA is not angle-corrected. Within VZA ≤ 60° the residual viewing-angle effect is "
               "tens of W m⁻² and is treated as noise because VZA is not an allowed predictor. The drift of altitude "
               "and local time is also absorbed by the time components.",
@@ -355,8 +365,9 @@ def main():
               "spherical-cap smoothing (~10³ km optimum), but CLARA's damped spatial contrasts mean the map's "
               "fine-scale structure is mostly ERA5's, scaled by β₁. It is not information CLARA resolves.",
               "- **Missing observations.** Cell-months are observed only along night-side tracks; polar-day cells "
-              "have no night and are not predicted. Post-gap cell-months typically rest on a single overpass, so they "
-              "are much noisier than pre-gap ones.",
+              "have no night and are predicted from the darkest-hours ERA5 fallback (extrapolation, hatched). "
+              "Post-gap cell-months typically rest on a single overpass, so they are much noisier than pre-gap "
+              "ones.",
               "- **Temporal meaning.** Monthly means of sparse instantaneous samples are compared with complete "
               "monthly means: day-to-day weather (~34 W m⁻² within cell-month SD of daily means) is absorbed as noise.",
               f"- **Approximation.** The sparse (VFE) GP uses M = {', '.join(map(str, m_fit))} fixed k-means inducing "

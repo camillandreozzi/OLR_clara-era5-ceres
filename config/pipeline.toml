@@ -9,7 +9,7 @@ vza_max = 60.0          # deg, viewing zenith angle at the footprint; larger ang
 overpass_gap_min = 20.0 # min, a gap longer than this starts a new overpass (orbit period ~96 min)
 
 [grid]
-res_deg = 1             # model grid spacing (deg); user choice after the 1 deg feasibility test
+res_deg = 5             # grid spacing (deg) of the cell-month means and the predictions; user + supervisor, 2026-10-23
 
 [era5]
 night_sza_min = 100.0   # deg, same night definition as the CLARA QC
@@ -19,13 +19,14 @@ smoothing_radii_km = [0.0, 300.0, 600.0, 1000.0, 1500.0]  # spherical-cap radii;
 origin = "2020-01-01"   # t = 0 of the long-term time coordinate (years)
 first_month = "2020-01"
 last_month = "2026-09"
-gap_start = "2021-09"   # CLARA data gap; pre/post-gap labels are used for reporting only, never as a predictor
+gap_start = "2021-09"   # CLARA data gap; post_gap = 1 from gap_start on (predictor when gp.gap_step), period labels for reporting
 gap_end = "2022-05"
 
 [gp]
 kernels = ["exponential", "gaussian", "matern32"]
-n_inducing = 500       # 1 deg feasibility test: M = 500 keeps ~150 fits within ~10 h
-restarts = 1           # one fixed start for every kernel and fold (compute budget at 1 deg)
+gap_step = true        # mean adds beta2 * post_gap: 0 before time.gap_start, 1 from it (gap months are post-gap)
+n_inducing = 500       # laptop budget (Euler: 1000)
+restarts = 1           # one fixed start for every kernel and fold (laptop budget; Euler: 3)
 max_iter = 200
 seed = 20261022
 jitter = 1e-6
@@ -61,7 +62,3 @@ bootstrap_samples = 2000
 # The regression-only models (linear, linear_noera5) always run. The GP without ERA5 uses the winning kernel:
 # set this to the first row of results/model/kernel_comparison.csv once the kernel CV has finished.
 gp_noera5_kernels = []
-
-[maps]
-min_months_per_year = 6     # a year gets maps when at least this many months ...
-min_cells_per_month = 100   # ... have at least this many observed cell-months

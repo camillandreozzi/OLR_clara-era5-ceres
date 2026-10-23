@@ -30,7 +30,7 @@ KERNEL_LABELS = {"exponential": "Exponential", "gaussian": "Gaussian (SE)", "mat
 # baselines (src/baselines.py): a GP without ERA5 keeps its kernel's colour (drawn hollow); regression-only
 # models are neutral
 BASELINE_COLORS = {"linear": INK, "linear_noera5": MUTED}
-BASELINE_LABELS = {"linear": "Regression on ERA5 (no GP)", "linear_noera5": "Constant (no GP, no ERA5)"}
+BASELINE_LABELS = {"linear": "Regression on ERA5 (no GP)", "linear_noera5": "Pre/post-gap constant (no GP, no ERA5)"}
 
 
 def model_label(model):

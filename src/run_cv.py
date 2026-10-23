@@ -1,9 +1,13 @@
 """Phase 5: blocked spatio-temporal cross-validation of the three GP kernels and of the baselines, and the
 full-data fits.
 
-Models (src/baselines.py): the GP kernels exponential | gaussian | matern32 (mean b0 + b1 ERA5), and the
-baselines linear (b0 + b1 ERA5, no kernel), linear_noera5 (constant) and <kernel>_noera5 (GP, mean b0).
-All are scored on the same folds (SHA-256 checked) with the same metrics.
+Models (src/baselines.py): the GP kernels exponential | gaussian | matern32 (mean b0 + b1 ERA5 + b2 post_gap),
+and the baselines linear (b0 + b1 ERA5 + b2 post_gap, no kernel), linear_noera5 (b0 + b2 post_gap) and
+<kernel>_noera5 (GP, mean b0 + b2 post_gap); b2 is there when gp.gap_step is true. All are scored on the same
+folds (SHA-256 checked) with the same metrics.
+
+make-folds refuses to replace the folds while results/model holds fits, fold predictions or inducing inputs
+made with other folds (e.g. after a grid change): archive or delete results/model first.
 
 Steps (each resumable; finished folds are skipped):
     python src/run_cv.py --make-folds                    write results/model/folds.csv (+ summary, SHA-256)
@@ -84,7 +88,7 @@ def era5_predictor(cfg, obs, train, era5):
 
 def inducing(cfg, x_train, key):
     """k-means inducing inputs of one fold, cached so every kernel of the fold uses the same ones."""
-    path = config.MODEL_DIR / "inducing" / f"{key}_M{cfg['gp']['n_inducing']}.npy"
+    path = config.MODEL_DIR / "inducing" / f"{key}_{cfg['grid']['res_deg']}deg_M{cfg['gp']['n_inducing']}.npy"
     if path.exists():
         return np.load(path)
     z = gp.inducing_inputs(x_train, cfg["gp"]["n_inducing"], cfg["gp"], cfg["gp"]["seed"])
@@ -105,6 +109,7 @@ def predictions_frame(obs, rows, pred, kernel, cv_type, fold, block_id, sample_t
         "pred_mean": pred["mean"], "mean_fn": pred["mean_fn"], "latent_var": pred["latent_var"],
         "latent_sd": np.sqrt(pred["latent_var"]), "pred_var_obs": pred["obs_var"],
         "pred_sd_obs": np.sqrt(pred["obs_var"]), "residual": d.clara.to_numpy() - pred["mean"],
+        "post_gap": d.post_gap.to_numpy(),
         "kernel": kernel, "cv_type": cv_type, "fold": fold, "block_id": block_id, "sample_type": sample_type,
         "cell_area_km2": d.cell_area_km2.to_numpy(), "period": d.period.to_numpy(), "band": d.band.to_numpy(),
         "season": d.season.to_numpy()})
@@ -131,9 +136,24 @@ def check_folds(cfg=None):
     return folds
 
 
+def stale_outputs(new_hash):
+    """Fits, fold predictions and inducing inputs under MODEL_DIR that were made with folds other than
+    new_hash (the folds_sha256.txt on disk differs); empty when the folds are unchanged or nothing exists."""
+    sha = config.MODEL_DIR / "folds_sha256.txt"
+    if not sha.exists() or sha.read_text().strip() == new_hash:
+        return []
+    d = config.MODEL_DIR
+    return sorted(d.glob("*/folds/*.parquet")) + sorted(d.glob("*/full_model.pt")) + sorted(d.glob("inducing/*.npy"))
+
+
 def make_folds(cfg):
     obs = load_obs(cfg)
     folds = cv.make_folds(obs, cfg)
+    stale = stale_outputs(cv.folds_hash(folds))
+    if stale:
+        raise RuntimeError(f"{len(stale)} outputs in {config.MODEL_DIR} were made with other folds (e.g. "
+                           f"{stale[0].relative_to(config.MODEL_DIR)}); the runs would skip them as done. "
+                           f"Archive or delete {config.MODEL_DIR} first, then make the folds again.")
     config.MODEL_DIR.mkdir(parents=True, exist_ok=True)
     folds.to_csv(config.MODEL_DIR / "folds.csv", index=False)
     (config.MODEL_DIR / "folds_sha256.txt").write_text(cv.folds_hash(folds) + "\n")
@@ -159,9 +179,10 @@ def fit_fold(cfg, obs, folds, x_all, kernel, cv_type, fold, verbose=False):
     radius, rs, e = era5_predictor(cfg, obs, train, era5)
     z = inducing(cfg, x_all[train], f"{cv_type}_{fold:02d}") if family else None
     t0 = time.time()
+    s = obs.post_gap.to_numpy()
     model = baselines.make(kernel, cfg["gp"], z).fit(x_all[train], obs.clara[train], e[train],
-                                                     obs.n_overpasses[train], verbose=verbose)
-    pred = model.predict(x_all[test], e[test], obs.n_overpasses[test].to_numpy())
+                                                     obs.n_overpasses[train], verbose=verbose, s=s[train])
+    pred = model.predict(x_all[test], e[test], obs.n_overpasses[test].to_numpy(), s=s[test])
     frame = predictions_frame(obs, np.flatnonzero(test), pred, kernel, cv_type, fold, block_id,
                               "out_of_sample", e, radius)
     hp = model.hyperparameters() | {"cv_type": cv_type, "fold": fold, "block_id": block_id,
@@ -278,8 +299,9 @@ def run_full(cfg, kernel, verbose):
     radius, rs, e = era5_predictor(cfg, obs, allrows, era5)
     z = inducing(cfg, x, "full") if family else None
     t0 = time.time()
-    model = baselines.make(kernel, cfg["gp"], z).fit(x, obs.clara, e, obs.n_overpasses, verbose=verbose)
-    pred = model.predict(x, e, obs.n_overpasses.to_numpy())
+    s = obs.post_gap.to_numpy()
+    model = baselines.make(kernel, cfg["gp"], z).fit(x, obs.clara, e, obs.n_overpasses, verbose=verbose, s=s)
+    pred = model.predict(x, e, obs.n_overpasses.to_numpy(), s=s)
     frame = predictions_frame(obs, np.arange(len(obs)), pred, kernel, "none", -1, "all", "in_sample", e, radius)
     write_parts(frame, out_dir / "insample_fitted.csv")
     hp = model.hyperparameters() | {"era5_radius_km": radius, "n_train": len(obs), "fit_seconds": time.time() - t0} \

@@ -2,15 +2,17 @@
 
 Model (identical for every kernel; only kappa changes):
 
-    y_i = beta0 + beta1 * e_i + f(x_i) + eps_i,      eps_i ~ N(0, sigma0^2 + sigma1^2 / n_i)
+    y_i = beta0 + beta1 * e_i + beta2 * s_i + f(x_i) + eps_i,      eps_i ~ N(0, sigma0^2 + sigma1^2 / n_i)
 
     y_i   CLARA cell-month mean OLR (W m-2), e_i the night-time ERA5 OLR of the cell-month,
+    s_i   post_gap: 1 from the start of the 2021-22 CLARA data gap on, 0 before (harmonise.post_gap_indicator);
+          beta2 is the calibration step across the gap. The term is present when cfg gap_step is true.
     n_i   number of distinct CLARA overpasses behind y_i (samples within one overpass are correlated)
     f     zero-mean GP with the additive covariance
 
     k(x, x') = sigma_A^2 kappa(r_A) + sigma_B^2 kappa(r_B)
     r_A^2 = |u - u'|^2 / ell_space_A^2 + |c - c'|^2 / ell_season^2     space x season (recurs every year)
-    r_B^2 = |u - u'|^2 / ell_space_B^2 + (t - t')^2 / ell_time^2       space x long-term time (drift, steps)
+    r_B^2 = |u - u'|^2 / ell_space_B^2 + (t - t')^2 / ell_time^2       space x long-term time (drift)
 
     kappa(r) = exp(-r)                        exponential
              = exp(-r^2 / 2)                  gaussian (squared exponential)
@@ -29,8 +31,8 @@ Z are fixed k-means centres of the training inputs, shared by all kernels in a f
 are compared with the same approximation basis. Hyperparameters and the mean coefficients are found by
 maximising the bound (type-II maximum likelihood) with L-BFGS, from fixed data-independent starts.
 
-The response and ERA5 are standardised inside fit() with training statistics only; everything returned
-is in physical units.
+The response and ERA5 are standardised inside fit() with training statistics only (s stays 0/1, so beta0 is
+the pre-gap intercept); everything returned is in physical units.
 
 GP(..., era5=False) is the no-ERA5 baseline: the mean function is the constant beta0 (beta1 fixed at 0) and
 ERA5 is never read, so the kernel alone carries the spatio-temporal structure (src/baselines.py).
@@ -168,6 +170,7 @@ class GP:
         if family not in KERNELS:
             raise ValueError(f"unknown kernel family {family!r}")
         self.family, self.cfg, self.era5 = family, cfg_gp, era5
+        self.step = bool(cfg_gp.get("gap_step", False))  # beta2 * post_gap in the mean function
         self.z = None if z is None else torch.as_tensor(z, dtype=DTYPE)
         self.raw = None  # log of positive parameters (standardised units), and beta
         self.stats = None
@@ -185,13 +188,20 @@ class GP:
         raw["beta0"] = torch.tensor(0.0, dtype=DTYPE, requires_grad=True)
         # without ERA5 beta1 is a fixed 0, not a parameter
         raw["beta1"] = torch.tensor(0.5 if self.era5 else 0.0, dtype=DTYPE, requires_grad=self.era5)
+        # without the gap step beta2 is a fixed 0, not a parameter
+        raw["beta2"] = torch.tensor(0.0, dtype=DTYPE, requires_grad=self.step)
         return raw
 
     @staticmethod
     def _pos(raw):
         p = {k: torch.exp(raw[k]) + 1e-6 for k in PARAMS}
-        p["beta0"], p["beta1"] = raw["beta0"], raw["beta1"]
+        p["beta0"], p["beta1"], p["beta2"] = raw["beta0"], raw["beta1"], raw["beta2"]
         return p
+
+    @staticmethod
+    def _mean(p, e, s=None):
+        """Mean function beta0 + beta1 e [+ beta2 s] (standardised units)."""
+        return p["beta0"] + p["beta1"] * e + (p["beta2"] * s if s is not None else 0.0)
 
     # -- data ---------------------------------------------------------------
     def _standardise(self, y, e):
@@ -202,12 +212,27 @@ class GP:
     def _t(a):
         return torch.as_tensor(np.asarray(a, float), dtype=DTYPE)
 
+    def _step(self, s, nrow, training=False):
+        """post_gap as a float array when the model has the gap step, else None (s is then ignored). On training
+        rows both regimes must be present, otherwise beta2 cannot be separated from beta0."""
+        if not self.step:
+            return None
+        if s is None:
+            raise ValueError("the model has the gap step (gap_step = true): pass s = post_gap")
+        s = np.asarray(s, float)
+        if s.shape != (nrow,):
+            raise ValueError(f"post_gap has shape {s.shape}, expected ({nrow},)")
+        if training and np.ptp(s) == 0:
+            raise ValueError("post_gap is constant on the training rows, so the gap step is not identifiable (a CV "
+                             "fold holds out a whole regime): use shorter temporal windows, or gp.gap_step = false")
+        return s
+
     # -- objective ----------------------------------------------------------
-    def _terms(self, p, x, y, e, n, d=None):
+    def _terms(self, p, x, y, e, n, d=None, s=None):
         """Return (L, LB, A, c, noise, residual) of the VFE bound in standardised units.
         d = (sq_dists(z, z), sq_dists(z, x)) may be passed to avoid recomputing the distances."""
         noise = p["sigma0"] ** 2 + p["sigma1"] ** 2 / n
-        r = y - (p["beta0"] + p["beta1"] * e)
+        r = y - self._mean(p, e, s)
         d_zz, d_zx = d if d is not None else (sq_dists(self.z, self.z), sq_dists(self.z, x))
         kuu = kernel_from_dists(self.family, d_zz, p)
         l = robust_cholesky(kuu, self.cfg["jitter"])
@@ -218,15 +243,15 @@ class GP:
         c = torch.linalg.solve_triangular(lb, (a @ (r / torch.sqrt(noise)))[:, None], upper=False)[:, 0]
         return l, lb, a, c, noise, r
 
-    def _chunk_sums(self, p, l, x, y, e, n):
+    def _chunk_sums(self, p, l, x, y, e, n, s=None):
         """Sums over one chunk of rows: A A^T, A r~, r~.r~, sum log noise, trace term (r~ = r / sqrt(noise))."""
         noise = p["sigma0"] ** 2 + p["sigma1"] ** 2 / n
-        rt = (y - (p["beta0"] + p["beta1"] * e)) / torch.sqrt(noise)
+        rt = (y - self._mean(p, e, s)) / torch.sqrt(noise)
         a = torch.linalg.solve_triangular(l, kernel(self.family, self.z, x, p), upper=False) / torch.sqrt(noise)[None, :]
         return (a @ a.T, a @ rt, (rt * rt).sum(), torch.log(noise).sum(),
                 ((p["sigma_A"] ** 2 + p["sigma_B"] ** 2) / noise).sum() - (a * a).sum())
 
-    def _chunked(self, p, x, y, e, n, chunk):
+    def _chunked(self, p, x, y, e, n, chunk, s=None):
         """(L, LB, c, logdet, quad, trace) of the VFE bound accumulated over chunks of rows. Each chunk is
         recomputed in the backward pass (gradient checkpointing), so memory is O(M x chunk), not O(M x N)."""
         from torch.utils.checkpoint import checkpoint
@@ -236,7 +261,8 @@ class GP:
         sums = None
         for i in range(0, len(y), chunk):
             sl = slice(i, i + chunk)
-            fn = lambda l_, *vals, sl=sl: self._chunk_sums(dict(zip(keys, vals)), l_, x[sl], y[sl], e[sl], n[sl])
+            fn = lambda l_, *vals, sl=sl: self._chunk_sums(dict(zip(keys, vals)), l_, x[sl], y[sl], e[sl], n[sl],
+                                                           None if s is None else s[sl])
             part = checkpoint(fn, l, *[p[k] for k in keys], use_reentrant=False) if torch.is_grad_enabled() \
                 else fn(l, *[p[k] for k in keys])
             sums = part if sums is None else tuple(s + q for s, q in zip(sums, part))
@@ -246,14 +272,14 @@ class GP:
         logdet = 2 * torch.log(lb.diagonal()).sum() + lognoise
         return l, lb, c, logdet, rr - (c * c).sum(), trace
 
-    def bound_chunked(self, p, x, y, e, n, chunk):
+    def bound_chunked(self, p, x, y, e, n, chunk, s=None):
         """The same Titsias bound as bound(), accumulated over chunks of `chunk` rows."""
-        _, _, _, logdet, quad, trace = self._chunked(p, x, y, e, n, chunk)
+        _, _, _, logdet, quad, trace = self._chunked(p, x, y, e, n, chunk, s)
         return -0.5 * (y.shape[0] * math.log(2 * math.pi) + logdet + quad + trace)
 
-    def bound(self, p, x, y, e, n, d=None):
+    def bound(self, p, x, y, e, n, d=None, s=None):
         """Titsias collapsed lower bound on log p(y), standardised units."""
-        l, lb, a, c, noise, r = self._terms(p, x, y, e, n, d)
+        l, lb, a, c, noise, r = self._terms(p, x, y, e, n, d, s)
         nobs = y.shape[0]
         logdet = 2 * torch.log(lb.diagonal()).sum() + torch.log(noise).sum()
         quad = (r * r / noise).sum() - (c * c).sum()
@@ -261,9 +287,11 @@ class GP:
         return -0.5 * (nobs * math.log(2 * math.pi) + logdet + quad + trace)
 
     # -- fitting ------------------------------------------------------------
-    def fit(self, x, y, e, n, verbose=False):
-        """Fit on training rows: inputs x (n, 6), CLARA y, ERA5 e, overpasses n (all physical units)."""
+    def fit(self, x, y, e, n, verbose=False, s=None):
+        """Fit on training rows: inputs x (n, 6), CLARA y, ERA5 e, overpasses n (all physical units), and
+        s = post_gap (0/1), required when the model has the gap step."""
         y, n = np.asarray(y, float), np.asarray(n, float)
+        s = self._step(s, len(y), training=True)
         e = np.asarray(e, float) if self.era5 else np.zeros_like(y)  # without ERA5, e is never read
         self.stats = {"y_mean": y.mean(), "y_sd": y.std(), "e_mean": e.mean(), "e_sd": e.std() if self.era5 else 1.0}
         if self.z is None:
@@ -271,13 +299,14 @@ class GP:
                                      dtype=DTYPE)
         xt, nt = self._t(x), self._t(n)
         yt, et = (self._t(v) for v in self._standardise(y, e))
+        st = None if s is None else self._t(s)
         chunk = self.cfg.get("chunk_size", 0)
         if chunk and len(y) > chunk:  # large data: chunked, checkpointed bound, memory O(M x chunk)
             d = None
-            objective = lambda p: self.bound_chunked(p, xt, yt, et, nt, chunk)
+            objective = lambda p: self.bound_chunked(p, xt, yt, et, nt, chunk, st)
         else:  # cache the parameter-free distances, memory O(M x N)
             d = (sq_dists(self.z, self.z), sq_dists(self.z, xt))
-            objective = lambda p: self.bound(p, xt, yt, et, nt, d)
+            objective = lambda p: self.bound(p, xt, yt, et, nt, d, st)
         best = None
         factors = [1.0, 0.5, 2.0][: self.cfg["restarts"]]
         for factor in factors:
@@ -311,31 +340,34 @@ class GP:
         with torch.no_grad():
             p = self._pos(self.raw)
             if d is None:
-                l, lb, c, _, _, _ = self._chunked(p, xt, yt, et, nt, chunk)
+                l, lb, c, _, _, _ = self._chunked(p, xt, yt, et, nt, chunk, st)
             else:
-                l, lb, _, c, _, _ = self._terms(p, xt, yt, et, nt, d)
+                l, lb, _, c, _, _ = self._terms(p, xt, yt, et, nt, d, st)
         self._post = {"p": p, "l": l, "lb": lb, "c": c}
         del d
         return self
 
     # -- prediction ---------------------------------------------------------
-    def _mean_fn(self, e):
-        """Mean function beta0 + beta1 e in physical units (W m-2)."""
-        b0, b1 = self.coefficients()
-        return b0 + b1 * np.asarray(e, float)
+    def _mean_fn(self, e, s=None):
+        """Mean function beta0 + beta1 e [+ beta2 s] in physical units (W m-2)."""
+        b0, b1, b2 = self.coefficients()
+        return b0 + b1 * np.asarray(e, float) + (b2 * s if s is not None else 0.0)
 
     def coefficients(self):
-        """(beta0, beta1) of the mean function in physical units: CLARA = beta0 + beta1 * ERA5."""
+        """(beta0, beta1, beta2) of the mean function in physical units:
+        CLARA = beta0 + beta1 * ERA5 + beta2 * post_gap (beta2 = 0 without the gap step)."""
         s, p = self.stats, self._post["p"]
         b1 = float(p["beta1"]) * s["y_sd"] / s["e_sd"]
         b0 = s["y_mean"] + float(p["beta0"]) * s["y_sd"] - b1 * s["e_mean"]
-        return b0, b1
+        return b0, b1, float(p["beta2"]) * s["y_sd"]
 
-    def predict(self, x, e, n=None, batch=20000):
-        """Predictions at inputs x with ERA5 e. Returns a dict of numpy arrays in physical units:
-        mean (latent monthly-mean CLARA OLR), mean_fn (beta0 + beta1 e), latent_var, and, when n
-        (overpasses) is given, obs_var = latent_var + noise for a new cell-month mean from n overpasses."""
+    def predict(self, x, e, n=None, batch=20000, s=None):
+        """Predictions at inputs x with ERA5 e and post_gap s (required with the gap step). Returns a dict of
+        numpy arrays in physical units: mean (latent monthly-mean CLARA OLR), mean_fn (beta0 + beta1 e
+        [+ beta2 s]), latent_var, and, when n (overpasses) is given, obs_var = latent_var + noise for a new
+        cell-month mean from n overpasses."""
         post, sy = self._post, self.stats["y_sd"]
+        s = self._step(s, len(x))
         if not self.era5:
             e = np.zeros(len(x))
         out = {"mean": [], "latent_var": []}
@@ -348,7 +380,7 @@ class GP:
                 out["mean"].append((t2.T @ post["c"]).numpy())
                 var = kernel_diag(xs, post["p"]) - (t1 * t1).sum(0) + (t2 * t2).sum(0)
                 out["latent_var"].append(var.clamp_min(0).numpy())
-        mean_fn = self._mean_fn(e)
+        mean_fn = self._mean_fn(e, s)
         res = {"mean_fn": mean_fn, "mean": mean_fn + np.concatenate(out["mean"]) * sy,
                "latent_var": np.concatenate(out["latent_var"]) * sy ** 2}
         if n is not None:
@@ -367,13 +399,14 @@ class GP:
             return float(sum(wt[i:i + block] @ (kernel(self.family, xs[i:i + block], xs, self._post["p"]) @ wt)
                              for i in range(0, len(xs), block)))
 
-    def aggregate(self, x, e, weights, prior_quad=None):
+    def aggregate(self, x, e, weights, prior_quad=None, s=None):
         """Mean and variance of the weighted average sum_i w_i f*(x_i) (weights normalised to sum 1),
         using the full posterior covariance of the latent values rather than their variances alone.
-        prior_quad = prior_quadratic(x, weights) may be passed when it is already known."""
+        prior_quad = prior_quadratic(x, weights) may be passed when it is already known; s = post_gap."""
         w = np.asarray(weights, float)
         w = w / w.sum()
         post, sy = self._post, self.stats["y_sd"]
+        s = self._step(s, len(x))
         if not self.era5:
             e = np.zeros(len(x))
         if prior_quad is None:
@@ -385,7 +418,7 @@ class GP:
             t2 = torch.linalg.solve_triangular(post["lb"], t1, upper=False)
             var = prior_quad - ((t1 @ wt) ** 2).sum() + ((t2 @ wt) ** 2).sum()
             mean = wt @ (t2.T @ post["c"])
-        return float(w @ self._mean_fn(e) + float(mean) * sy), float(var.clamp_min(0)) * sy ** 2
+        return float(w @ self._mean_fn(e, s) + float(mean) * sy), float(var.clamp_min(0)) * sy ** 2
 
     def state(self):
         """Everything predict() needs, for torch.save (training data are not stored)."""
@@ -404,10 +437,10 @@ class GP:
     def hyperparameters(self):
         """Fitted parameters in physical units, with their interpretation-ready names."""
         p, sy = self._post["p"], self.stats["y_sd"]
-        b0, b1 = self.coefficients()
+        b0, b1, b2 = self.coefficients()
         return {
             "kernel": self.family, "bound": self.bound_value, "n_evals": self.n_evals, "n_inducing": len(self.z),
-            "beta0_wm2": b0, "beta1": b1,
+            "beta0_wm2": b0, "beta1": b1, "beta2_wm2": b2,
             "sigma_A_wm2": float(p["sigma_A"]) * sy, "ell_space_A_km": float(chord_to_km(float(p["ell_space_A"]))),
             "ell_space_A_chord": float(p["ell_space_A"]),
             "ell_season_days": float(chord_to_days(float(p["ell_season"]))), "ell_season_chord": float(p["ell_season"]),
@@ -417,22 +450,22 @@ class GP:
         }
 
 
-def exact_log_marginal(family, p, x, y, e, n):
-    """Exact log N(y | beta0 + beta1 e, K + noise) in the units of y (for tests and benchmarks)."""
+def exact_log_marginal(family, p, x, y, e, n, s=None):
+    """Exact log N(y | beta0 + beta1 e [+ beta2 s], K + noise) in the units of y (for tests and benchmarks)."""
     noise = p["sigma0"] ** 2 + p["sigma1"] ** 2 / n
-    r = y - (p["beta0"] + p["beta1"] * e)
+    r = y - GP._mean(p, e, s)
     k = kernel(family, x, x, p) + torch.diag(noise)
     l = torch.linalg.cholesky(k)
     alpha = torch.cholesky_solve(r[:, None], l)[:, 0]
     return -0.5 * (len(y) * math.log(2 * math.pi) + 2 * torch.log(l.diagonal()).sum() + r @ alpha)
 
 
-def exact_predict(family, p, x, y, e, n, xs, es):
+def exact_predict(family, p, x, y, e, n, xs, es, s=None, ss=None):
     """Exact GP latent mean and variance at xs (units of y), for tests and benchmarks."""
     noise = p["sigma0"] ** 2 + p["sigma1"] ** 2 / n
-    r = y - (p["beta0"] + p["beta1"] * e)
+    r = y - GP._mean(p, e, s)
     l = torch.linalg.cholesky(kernel(family, x, x, p) + torch.diag(noise))
     ks = kernel(family, x, xs, p)
     alpha = torch.cholesky_solve(r[:, None], l)[:, 0]
     v = torch.linalg.solve_triangular(l, ks, upper=False)
-    return p["beta0"] + p["beta1"] * es + ks.T @ alpha, kernel_diag(xs, p) - (v * v).sum(0)
+    return GP._mean(p, es, ss) + ks.T @ alpha, kernel_diag(xs, p) - (v * v).sum(0)

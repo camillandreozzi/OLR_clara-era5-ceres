@@ -1,3 +1,0 @@
-model,gp,era5,mean_fold_rmse_joint,mean_fold_rmse_spatial,mean_fold_rmse_temporal,primary_score,mean_fold_rmse_area,mean_fold_mae,mean_fold_bias,mean_fold_cover50,mean_fold_cover80,mean_fold_cover95,mean_fold_nlpd,mean_fold_crps,mean_fold_width95,mean_fold_r2,mean_fold_r2_mean_fn
-linear,False,True,46.6932,40.0412,50.8299,45.8548,45.9043,34.0857,-9.5324,0.5432,0.8145,0.9297,5.2555,24.9884,168.0564,0.0091,0.0091
-linear_noera5,False,False,49.5624,43.4245,53.6697,48.8855,48.4180,38.5064,-3.5447,0.4794,0.7909,0.9371,5.3169,27.3861,179.3338,-0.1465,-0.1465

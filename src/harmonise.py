@@ -1,4 +1,4 @@
-"""Phase 3: the harmonised CLARA - ERA5 dataset on the model grid (5 deg cells x months).
+"""Phase 3: the harmonised CLARA - ERA5 dataset on the model grid (grid.res_deg cells x months).
 
 Steps (each documented in results/preprocessing/decisions.md):
   1. Units and sign. CLARA OLR is used as stored (W m-2, positive upward). ERA5 ttr (J m-2, negative
@@ -9,13 +9,15 @@ Steps (each documented in results/preprocessing/decisions.md):
      the monthly mean), never the CLARA sample times.
   3. Space. Longitudes in [-180, 180), latitudes ascending. ERA5 0.25 deg points -> 1 deg cell area means
      (read_in.era5_to_ceres_grid) -> night-time mean -> optional spherical-cap smoothing (ERA5 only) ->
-     5 deg area means (read_in.coarsen, NaN aware). CLARA footprints are binned into the 5 deg cells by
+     res deg area means (read_in.coarsen, NaN aware). CLARA footprints are binned into the res deg cells by
      position; no CLARA value is ever interpolated or spread to another cell.
   4. QC. read_in's earth_view & in_range, plus night side (SZA > qc.night_sza_min) and VZA <= qc.vza_max
      (samples.py).
   5. Pairing. Each observed cell-month (>= 1 QC'd sample) gets the ERA5 night-time OLR of the same cell
      and month. Cells and months without CLARA stay missing in the observation table; the prediction grid
      holds every cell-month with its clara_observed flag, so modelled and observed values never mix.
+  6. Regime. post_gap = 1 from time.gap_start on, 0 before (post_gap_indicator): the predictor of the
+     ~40 W m-2 calibration step across the CLARA gap. The gap months, never observed, count as post-gap.
 
 Output:
     data/processed/harmonised_<res>deg_monthly.parquet     observations (one row per observed cell-month)
@@ -60,6 +62,12 @@ def cell_area_km2(lat_c, res):
     return EARTH_RADIUS_KM ** 2 * (np.sin(n) - np.sin(s)) * np.radians(res)
 
 
+def post_gap_indicator(time, cfg):
+    """1.0 for months from time.gap_start on (the gap months included), 0.0 before."""
+    per = pd.Series(pd.to_datetime(time)).dt.to_period("M")
+    return (per >= pd.Period(cfg["time"]["gap_start"], "M")).astype(float).to_numpy()
+
+
 def mid_month(month_start):
     """Middle of the month of each month-start timestamp (Series or array)."""
     t = pd.Series(pd.to_datetime(month_start))
@@ -91,7 +99,7 @@ def bin_cell_months(q, res):
 # ---------------------------------------------------------------------------
 
 def era5_on_grid(night, res, radii_km):
-    """ERA5 night-time OLR (smoothed at each radius) and 24 h OLR as 5 deg cell-month area means."""
+    """ERA5 night-time OLR (smoothed at each radius) and 24 h OLR as res deg cell-month area means."""
     sm = era5_night.smoothed(night, "olr_night", radii_km)
     sm["olr_24h"] = night.olr_24h
     sm["night_frac"] = night.night_frac
@@ -127,6 +135,7 @@ def build(cfg):
     gs, ge = pd.Period(cfg["time"]["gap_start"], "M"), pd.Period(cfg["time"]["gap_end"], "M")
     per = obs.time.dt.to_period("M")
     obs["period"] = np.where(per < gs, "pre-gap", np.where(per > ge, "post-gap", "gap"))
+    obs["post_gap"] = post_gap_indicator(obs.time, cfg)
     obs = obs.sort_values(["time", "lat", "lon"]).reset_index(drop=True)
     obs.insert(0, "obs_id", np.arange(len(obs)))
     obs.insert(1, "year", obs.time.dt.year)
@@ -144,6 +153,7 @@ def build(cfg):
     grid["n_samples"] = grid.n_samples.fillna(0).astype(int)
     grid["night_fallback"] = grid.night_fallback > 0
     grid["model_time"] = mid_month(grid.time)
+    grid["post_gap"] = post_gap_indicator(grid.time, cfg)
     grid["cell_area_km2"] = cell_area_km2(grid.lat, res)
     grid.insert(0, "year", grid.time.dt.year)
     grid.insert(1, "month", grid.time.dt.month)
@@ -193,6 +203,11 @@ def validation_checks(obs, grid, cfg):
         ("prediction-grid cell-months in polar day (darkest-hours fallback)", int(grid.night_fallback.sum()),
          "flagged, extrapolation"),
         ("duplicate (time, lat, lon) in observations", int(obs.duplicated(["time", "lat", "lon"]).sum()), "0"),
+        ("observations whose post_gap disagrees with the period label",
+         int((obs.post_gap != (obs.period != "pre-gap")).sum()), "0"),
+        ("prediction-grid months with post_gap = 1", grid.time[grid.post_gap == 1].nunique(),
+         f"{len(pd.period_range(cfg['time']['gap_start'], cfg['time']['last_month'], freq='M'))} "
+         f"(every month from {cfg['time']['gap_start']})"),
         ("CLARA cell-month means outside [olr_min, 400] W m-2", int(((obs.clara < 50) | (obs.clara > 400)).sum()), "0"),
     ]
     return pd.DataFrame(checks, columns=["check", "value", "expected"])
@@ -208,12 +223,12 @@ Configuration: `{cfg_path}`, grid {res} deg, QC night SZA > {sza:g} deg and VZA 
 | 2 | Physical-unit harmonisation only; y and ERA5 are standardised inside each CV fold with training rows | prevents leakage of test-fold statistics | none |
 | 3 | QC: read_in earth_view & in_range [{olr_min:g} (raised {olr_from}), {olr_max:g}] W m-2, footprint SZA > {sza:g} deg, VZA <= {vza:g} deg | CLARA measures OLR on the night side only; daylit footprints read tens of W m-2 higher; VZA > 60 deg shows strong limb darkening (results/eda/physics_*.png) | keeps {n_qc:,} of {n_usable:,} usable samples ({frac_qc:.0%}) |
 | 4 | Overpasses: consecutive QC'd samples separated by <= {gap:g} min belong to one overpass; n_overpasses per cell-month enters the noise model | samples along one track are strongly correlated (lag-1 r ~ 0.9), so the sampling error scales with overpasses, not samples | none |
-| 5 | Monthly resolution, {res} deg cells (user choice after the 1 deg feasibility test), model time = middle of the month | ERA5 night-time product is monthly; a cell-month mean is the CLARA estimand | CLARA values are only binned by footprint centre, never interpolated or copied to another cell. {res_note} "day" is not used as a predictor |
+| 5 | Monthly resolution, {res} deg cells (grid.res_deg; user and supervisor choice), model time = middle of the month | ERA5 night-time product is monthly; a cell-month mean is the CLARA estimand | CLARA values are only binned by footprint centre, never interpolated or copied to another cell. {res_note} "day" is not used as a predictor |
 | 6 | ERA5 night-time mean: hourly monthly means weighted by the fraction of the month's days on which each hour is night (SZA > {sza:g} deg at the 1 deg cell centre); polar-day cells (no night hour in the month) use the mean of the {n_dark} darkest hours instead and are flagged night_fallback | matches what CLARA can observe; a 24 h mean mixes in daytime OLR; the fallback gives the prediction grid every lat-lon cell (user requirement) | the fallback value is a different quantity (darkest hours of a sunlit month) and CLARA never observes those cells: predictions there are extrapolation and are hatched on maps |
 | 7 | ERA5 0.25 deg -> 1 deg trapezoid area means{coarsen_note} (cos-lat weights) | conservative area averaging, not point interpolation | ERA5 effective resolution degraded to the model grid; no new information |
 | 8 | ERA5 spherical-cap smoothing at R in {radii} km kept as candidate predictors; R is chosen per CV fold on training rows | CLARA sees a wide footprint (unknown FOV); matching effective resolutions without using test data | smoothing uses ERA5 only; it never fills NaN cells |
 | 9 | Observation table holds only cell-months with >= 1 QC'd CLARA sample; the prediction grid holds every lat-lon cell of every month and flags clara_observed and night_fallback | genuine missingness is kept explicit; the grid has no gaps | none |
-| 10 | Periods pre-gap / post-gap are labels for reporting only, never a model input | the user chose not to add a step term | none |
+| 10 | post_gap (1 from {gap_start} on, 0 before) enters every model's mean function as beta2 (gp.gap_step); the period labels pre-gap / post-gap are kept for reporting | CLARA - ERA5 changes by ~40 W m-2 across the {gap_start} -> {gap_end} data gap (calibration step, EDA); the user chose a step predictor. The gap months are assigned to the post-gap regime by convention | CLARA never observes the gap months, so predictions there are extrapolation and the step is placed at the start of the gap |
 | 11 | CERES EBAF is joined only into the EDA reference table, never into the model inputs | user decision: CERES is an EDA reference | none |
 
 ## Attrition
@@ -263,7 +278,7 @@ def main():
         olr_max=read_in.OLR_MAX, n_qc=int(s.qc.sum()), n_usable=int(s.usable.sum()),
         frac_qc=s.qc.sum() / s.usable.sum(), gap=cfg["qc"]["overpass_gap_min"],
         radii=", ".join(f"{r:g}" for r in cfg["era5"]["smoothing_radii_km"]),
-        n_dark=era5_night.N_DARKEST,
+        n_dark=era5_night.N_DARKEST, gap_start=cfg["time"]["gap_start"], gap_end=cfg["time"]["gap_end"],
         coarsen_note="" if res == 1 else f" -> {res} deg area means",
         res_note=(f"At 1 deg, {(obs.n_samples == 1).mean():.0%} of cell-months hold a single 30 s sample: the grid is much finer than CLARA's "
                   "effective resolution (~10^3 km, EDA), so 1 deg detail in the maps comes from ERA5 through beta1, "

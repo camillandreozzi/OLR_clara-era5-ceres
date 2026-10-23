@@ -101,3 +101,10 @@ def test_cap_smoothing_constant_nan_and_wrap():
     ds = xr.Dataset({"v": (("lat", "lon"), f)}, coords={"lat": lat, "lon": lon})
     sm = era5_night.smoothed(ds, "v", [0.0, 500.0])
     assert np.isnan(sm.v_r500.values[:3]).all()  # NaN cells (polar day) are never filled
+
+
+def test_post_gap_indicator():
+    cfg = {"time": {"gap_start": "2021-09"}}
+    t = pd.to_datetime(["2020-01-01 00:00", "2021-08-01 00:00", "2021-08-31 23:00", "2021-09-01 00:00", "2022-01-01 00:00",
+                        "2022-06-01 00:00"])
+    assert list(harmonise.post_gap_indicator(t, cfg)) == [0, 0, 0, 1, 1, 1]  # gap months count as post-gap

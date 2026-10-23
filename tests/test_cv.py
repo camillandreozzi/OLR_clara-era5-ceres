@@ -89,3 +89,21 @@ def test_metrics_definitions():
     assert m["cover95"] == 1.0 and m["cover50"] == 0.5
     # CRPS of a Gaussian at its mean with sd 1: (sqrt2 - 1)/sqrt(pi)
     assert cv.crps_gaussian(0.0, 0.0, 1.0) == pytest.approx((np.sqrt(2) - 1) / np.sqrt(np.pi))
+
+
+def test_stale_outputs_guard(tmp_path, monkeypatch):
+    """New folds must not reuse fits, fold predictions or inducing inputs of other folds (e.g. another grid)."""
+    import run_cv
+
+    monkeypatch.setattr(config, "MODEL_DIR", tmp_path)
+    assert run_cv.stale_outputs("abc") == []  # no folds yet
+    (tmp_path / "folds_sha256.txt").write_text("abc\n")
+    (tmp_path / "linear" / "folds").mkdir(parents=True)
+    (tmp_path / "inducing").mkdir()
+    pred = tmp_path / "linear" / "folds" / "spatial_00.parquet"
+    full = tmp_path / "linear" / "full_model.pt"
+    z = tmp_path / "inducing" / "full_1deg_M500.npy"
+    for f in (pred, full, z):
+        f.write_bytes(b"")
+    assert run_cv.stale_outputs("abc") == []  # same folds: the outputs are valid and resumable
+    assert run_cv.stale_outputs("def") == [pred, full, z]

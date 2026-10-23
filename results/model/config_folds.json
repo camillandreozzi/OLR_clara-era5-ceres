@@ -5,7 +5,7 @@
     "overpass_gap_min": 20.0
   },
   "grid": {
-    "res_deg": 1
+    "res_deg": 5
   },
   "era5": {
     "night_sza_min": 100.0,

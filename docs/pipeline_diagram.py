@@ -147,14 +147,14 @@ def draw():
          mono="samples.py")
     step(ax, 1, 5.8, y1 + 0.2, 1.3, 1.55, "c", "Inventory", ["files and", "coverage"], mono="inventory.py")
 
-    stage(ax, 2, 7.55, y1, 3.45, h1, "Harmonise: 1° × month")
+    stage(ax, 2, 7.55, y1, 3.45, h1, "Harmonise: 5° × month")
     step(ax, 2, 7.75, y1 + 0.2, 1.45, 1.55, "a", "ERA5 night", ["hour-of-day", "means, night", "hours only"],
          mono="era5_night.py")
     step(ax, 2, 9.35, y1 + 0.2, 1.45, 1.55, "b", "Pair", ["CLARA", "cell-months +", "ERA5 night"],
          mono="harmonise.py")
 
-    folder(ax, 11.35, y1 + 1.5, 2.4, 0.7, "data/processed/", "observations", "188 k cell-months")
-    folder(ax, 11.35, y1 + 0.4, 2.4, 0.7, "data/processed/", "prediction grid", "5.2 M cell-months, no gaps")
+    folder(ax, 11.35, y1 + 1.5, 2.4, 0.7, "data/processed/", "observations", "37.9 k cell-months")
+    folder(ax, 11.35, y1 + 0.4, 2.4, 0.7, "data/processed/", "prediction grid", "210 k cell-months, no gaps")
 
     for xa, xb in ((4.1, 4.25), (5.65, 5.8)):
         arrow(ax, (xa, y1 + 0.97), (xb, y1 + 0.97), lw=1.5, head=11)
@@ -167,7 +167,7 @@ def draw():
     y2, h2 = 5.95, 2.95
     stage(ax, 3, 0.25, y2, 2.85, h2, "Explore", "eda.py")
     for i, (name, note) in enumerate([("physics", "SZA, VZA"), ("resolution", "~10³ km"),
-                                      ("spatial", "range 1,170 km"), ("temporal", "ACF, regime step")]):
+                                      ("spatial", "range 1,060 km"), ("temporal", "ACF, regime step")]):
         yy = y2 + 1.95 - 0.47 * i
         box(ax, 0.45, yy, 2.45, 0.38, STAGE[3][2], STAGE[3][0], lw=1.2, r=0.08, z=2)
         text(ax, 0.6, yy + 0.19, name, size=10.5, weight="bold", ha="left", zorder=3)
@@ -175,7 +175,7 @@ def draw():
     text(ax, 1.68, y2 + 0.22, "→ results/eda/summary.md", size=9, color=MUTED, family=MONO)
 
     page(ax, 3.45, y2 + 0.35, 1.75, 2.25, "pipeline.toml", ["[qc]", "[grid]", "[era5]", "[gp]", "[cv]",
-                                                              "[maps]"])
+                                                              "[baselines]"])
     label(ax, 4.33, y2 + 2.8, "values set by the EDA", size=9)
     text(ax, 4.33, y2 + 0.13, "config/  read by every script", size=9, color=MUTED)
 
@@ -184,7 +184,7 @@ def draw():
     step(ax, 4, 5.75, sb_y, 1.6, sb_h, "a", "Folds", ["spatial, temporal,", "joint blocks", "+ buffers"],
          mono="--make-folds")
     step(ax, 4, 7.55, sb_y, 1.7, sb_h, "b", "Per fold", ["train rows only:", "ERA5 smoothing R,", "inducing inputs"])
-    step(ax, 4, 9.45, sb_y, 2.5, sb_h, "c", "Sparse GP (VFE)", ["CLARA = β₀ + β₁·ERA5", "+ f(space, season, t)"])
+    step(ax, 4, 9.45, sb_y, 2.5, sb_h, "c", "Sparse GP (VFE)", ["β₀ + β₁·ERA5 + β₂·gap", "+ f(space, season, t)"])
     for i, (name, color) in enumerate(KERNELS):
         kx = 9.51 + 0.81 * i
         box(ax, kx, sb_y + 0.12, 0.76, 0.32, color, color, lw=0, r=0.07, z=3)
@@ -215,16 +215,16 @@ def draw():
     for is_gp, y in row_y.items():
         text(ax, 1.2, y + ch / 2 + 0.11, "GP" if is_gp else "Regression", size=11.5, weight="bold")
         text(ax, 1.2, y + ch / 2 - 0.13, "mean + kernel" if is_gp else "no kernel", size=9, color=MUTED)
-    for is_gp, era5, model, formula in [(True, True, "<winner>", "β₀ + β₁·ERA5 + f(x)"),
-                                        (True, False, "<winner>_noera5", "β₀ + f(x)"),
-                                        (False, True, "linear", "β₀ + β₁·ERA5"),
-                                        (False, False, "linear_noera5", "β₀  (a constant)")]:
+    for is_gp, era5, model, formula in [(True, True, "<winner>", "β₀ + β₁·ERA5 + β₂·gap + f(x)"),
+                                        (True, False, "<winner>_noera5", "β₀ + β₂·gap + f(x)"),
+                                        (False, True, "linear", "β₀ + β₁·ERA5 + β₂·gap"),
+                                        (False, False, "linear_noera5", "β₀ + β₂·gap  (per period)")]:
         x, y = col_x[era5], row_y[is_gp]
         winner = model == "<winner>"  # the full model, already fitted in stage 4
         box(ax, x, y, cw, ch, STAGE[4][2] if winner else "white", STAGE[4][0] if winner else accent,
             lw=1.6, r=0.1, z=2)
         text(ax, x + cw / 2, y + 0.43, model, size=8.5, color=MUTED, family=MONO, zorder=3)
-        text(ax, x + cw / 2, y + 0.2, formula, size=11, weight="bold", zorder=3)
+        text(ax, x + cw / 2, y + 0.2, formula, size=9.5, weight="bold", zorder=3)
     # each arrow is one of the four contrasts
     for era5, x in col_x.items():
         cx = x + cw / 2
@@ -248,14 +248,14 @@ def draw():
     stage(ax, 6, 0.25, y4, 8.6, h4, "Map the winning kernel")
     step(ax, 6, 0.45, y4 + 0.2, 2.45, 1.4, "a", "Full-data fit", ["winner: lowest", "mean fold RMSE"],
          mono="--kernel <k> --full")
-    step(ax, 6, 3.15, y4 + 0.2, 3.0, 1.4, "b", "Monthly maps", ["mean, uncertainty,", "residuals"],
+    step(ax, 6, 3.15, y4 + 0.2, 3.0, 1.4, "b", "Monthly maps", ["every month: mean,", "uncertainty, residuals"],
          mono="predict_maps.py")
     step(ax, 6, 6.4, y4 + 0.2, 2.25, 1.4, "c", "Report", ["CV, ablation, maps:", "numbers from tables"],
          mono="report.py")
     for xa, xb in ((2.9, 3.15), (6.15, 6.4)):
         arrow(ax, (xa, y4 + 0.9), (xb, y4 + 0.9), lw=1.5, head=11)
 
-    folder(ax, 9.25, 1.35, 2.6, 0.7, "results/model/<kernel>/", "maps + NetCDF", "every cell, every month")
+    folder(ax, 9.25, 1.35, 2.6, 0.7, "results/model/<kernel>/", "maps, NetCDF, CSV", "every cell, every month")
     folder(ax, 9.25, 0.3, 2.6, 0.7, "results/report/", "report.md")
     pill(ax, 12.35, 0.45, 1.25, 0.4, "END")
 

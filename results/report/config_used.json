@@ -5,7 +5,7 @@
     "overpass_gap_min": 20.0
   },
   "grid": {
-    "res_deg": 1
+    "res_deg": 5
   },
   "era5": {
     "night_sza_min": 100.0,
@@ -30,6 +30,7 @@
       "gaussian",
       "matern32"
     ],
+    "gap_step": true,
     "n_inducing": 500,
     "restarts": 1,
     "max_iter": 200,
@@ -62,10 +63,6 @@
   },
   "baselines": {
     "gp_noera5_kernels": []
-  },
-  "maps": {
-    "min_months_per_year": 6,
-    "min_cells_per_month": 100
   },
   "_path": "config/pipeline.toml"
 }

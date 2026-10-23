@@ -1,2 +1,0 @@
-kernel,n_train,n_inducing,vfe_bound,exact_lml,bound_gap_per_obs,rmse_vfe,rmse_exact,max_abs_mean_diff,rms_mean_diff,median_sd_ratio_vfe_over_exact,fit_seconds,beta0_wm2,beta1,sigma_A_wm2,ell_space_A_km,ell_season_days,sigma_B_wm2,ell_space_B_km,ell_time_years,sigma0_wm2,sigma1_wm2
-matern32,3000,1000,-3845.4,-3841.5,0.0012978,39.915,39.908,1.4749,0.17128,1.0035,46.655,80.616,0.44453,7.5228,2988.7,182.62,20.262,20015,0.27748,0.0052654,40.788

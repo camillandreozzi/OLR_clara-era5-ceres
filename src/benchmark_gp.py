@@ -32,25 +32,29 @@ def vfe_vs_exact(cfg, obs, kernels, n_sub=3000, n_test=1000):
     tr, te = idx[:n_sub], idx[n_sub:]
     x = run_cv.inputs(obs, cfg)
     e = obs.era5_night_r0.to_numpy()
+    s = obs.post_gap.to_numpy()
     rows = []
     for kernel in kernels:
         t0 = time.time()
         cfg_k = dict(cfg["gp"], restarts=1, n_inducing=1000)
-        model = gp.GP(kernel, cfg_k).fit(x[tr], obs.clara.to_numpy()[tr], e[tr], obs.n_overpasses.to_numpy()[tr])
+        model = gp.GP(kernel, cfg_k).fit(x[tr], obs.clara.to_numpy()[tr], e[tr], obs.n_overpasses.to_numpy()[tr],
+                                         s=s[tr])
+        s_tr, s_te = (None, None) if not model.step else (torch.as_tensor(s[tr], dtype=gp.DTYPE),
+                                                          torch.as_tensor(s[te], dtype=gp.DTYPE))
         t_fit = time.time() - t0
         p = model._post["p"]
         yt, et = (torch.as_tensor(v, dtype=gp.DTYPE)
                   for v in model._standardise(obs.clara.to_numpy()[tr], e[tr]))
         xt, nt = torch.as_tensor(x[tr], dtype=gp.DTYPE), torch.as_tensor(obs.n_overpasses.to_numpy()[tr], dtype=gp.DTYPE)
         with torch.no_grad():
-            exact_lml = float(gp.exact_log_marginal(kernel, p, xt, yt, et, nt))
+            exact_lml = float(gp.exact_log_marginal(kernel, p, xt, yt, et, nt, s_tr))
             ys, es = model._standardise(obs.clara.to_numpy()[te], e[te])
             m_ex, v_ex = gp.exact_predict(kernel, p, xt, yt, et, nt, torch.as_tensor(x[te], dtype=gp.DTYPE),
-                                          torch.as_tensor(es, dtype=gp.DTYPE))
+                                          torch.as_tensor(es, dtype=gp.DTYPE), s_tr, s_te)
         sy, ym = model.stats["y_sd"], model.stats["y_mean"]
         m_ex = ym + m_ex.numpy() * sy
         v_ex = v_ex.numpy() * sy ** 2
-        pv = model.predict(x[te], e[te], obs.n_overpasses.to_numpy()[te])
+        pv = model.predict(x[te], e[te], obs.n_overpasses.to_numpy()[te], s=s[te])
         y_te = obs.clara.to_numpy()[te]
         rows.append({"kernel": kernel, "n_train": n_sub, "n_inducing": len(model.z), "vfe_bound": model.bound_value,
                      "exact_lml": exact_lml, "bound_gap_per_obs": (exact_lml - model.bound_value) / n_sub,
@@ -71,6 +75,7 @@ def m_sensitivity(cfg, obs, fold, m_values, kernels):
     x = run_cv.inputs(obs, cfg)
     radius, _ = run_cv.choose_radius(obs, train, cfg["era5"]["smoothing_radii_km"])
     e = obs[f"era5_night_r{int(radius)}"].to_numpy()
+    s = obs.post_gap.to_numpy()
     rows = []
     for m in m_values:
         z = gp.inducing_inputs(x[train], m, cfg["gp"], cfg["gp"]["seed"])
@@ -80,8 +85,8 @@ def m_sensitivity(cfg, obs, fold, m_values, kernels):
             # restarts only at the configured M (restart agreement); one start elsewhere to bound the runtime
             restarts = cfg["gp"]["restarts"] if m == cfg["gp"]["n_inducing"] else 1
             model = gp.GP(kernel, dict(cfg["gp"], n_inducing=m, restarts=restarts), z=z).fit(
-                x[train], obs.clara[train], e[train], obs.n_overpasses[train], verbose=True)
-            pred = model.predict(x[test], e[test], obs.n_overpasses[test].to_numpy())
+                x[train], obs.clara[train], e[train], obs.n_overpasses[train], verbose=True, s=s[train])
+            pred = model.predict(x[test], e[test], obs.n_overpasses[test].to_numpy(), s=s[test])
             met = cv.metrics(obs.clara[test], pred["mean"], pred["obs_var"], obs.cell_area_km2[test], pred["mean_fn"])
             rows.append({"M": m, "kernel": kernel, "fold": fold, "n_train": int(train.sum()), "n_test": int(test.sum()),
                          "bound_per_obs": model.bound_value / train.sum(), "rmse": met["rmse"],

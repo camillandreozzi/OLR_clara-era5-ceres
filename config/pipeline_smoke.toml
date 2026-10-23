@@ -10,7 +10,7 @@ vza_max = 60.0
 overpass_gap_min = 20.0
 
 [grid]
-res_deg = 1
+res_deg = 5
 
 [era5]
 night_sza_min = 100.0
@@ -25,6 +25,7 @@ gap_end = "2022-05"
 
 [gp]
 kernels = ["exponential", "gaussian", "matern32"]
+gap_step = true        # mean adds beta2 * post_gap: 0 before time.gap_start, 1 from it (gap months are post-gap)
 n_inducing = 100          # smoke: small
 restarts = 1              # smoke
 max_iter = 10             # smoke
@@ -45,7 +46,7 @@ init_sigma1 = 30.0
 spatial_block_lat = 90.0     # smoke: 2 x 3 blocks
 spatial_block_lon = 120.0
 spatial_buffer_km = 1000.0
-temporal_window_months = 30  # smoke: 3 windows
+temporal_window_months = 12  # smoke: 7 windows; every training set keeps both gap regimes (gp.gap_step)
 temporal_buffer_months = 1
 joint_block_lat = 90.0
 joint_block_lon = 120.0
@@ -60,7 +61,3 @@ bootstrap_samples = 200
 # The regression-only models (linear, linear_noera5) always run. The GP without ERA5 uses the winning kernel:
 # set this to the first row of results/model/kernel_comparison.csv once the kernel CV has finished.
 gp_noera5_kernels = ["matern32"]  # smoke: exercise the GP-without-ERA5 path
-
-[maps]
-min_months_per_year = 6
-min_cells_per_month = 100

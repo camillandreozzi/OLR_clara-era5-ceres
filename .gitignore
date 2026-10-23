@@ -21,3 +21,7 @@ results/model/inducing/
 results/model/*/folds/
 results/model/*/*/*_predictions.nc
 results/model/*/*/*_predictions.csv
+results/model/*/grid_predictions.csv
+
+# Archived outputs of the 1 deg grid (local only; delete when no longer needed)
+results/*_1deg/

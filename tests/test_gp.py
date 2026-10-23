@@ -113,8 +113,8 @@ def test_fit_recovers_mean_function_and_standardises_with_training_only():
            "init_sigma_A": 5.0, "init_sigma_B": 5.0, "init_ell_space_A_km": 2000.0, "init_ell_season_days": 60.0,
            "init_ell_space_B_km": 4000.0, "init_ell_time_years": 1.0, "init_sigma0": 5.0, "init_sigma1": 5.0}
     model = gp.GP("gaussian", cfg).fit(x[:300], y[:300], e[:300], np.ones(300))
-    b0, b1 = model.coefficients()
-    assert b1 == pytest.approx(0.8, abs=0.1)
+    b0, b1, b2 = model.coefficients()
+    assert b1 == pytest.approx(0.8, abs=0.1) and b2 == 0.0  # no gap step configured
     stats = dict(model.stats)
     pred = model.predict(x[300:], e[300:], np.ones(100))
     assert np.sqrt(np.mean((pred["mean"] - y[300:]) ** 2)) < 6
@@ -142,3 +142,46 @@ def test_chunked_bound_and_gradient_equal_unchunked(family):
         vals[name] = (float(b), torch.stack([raw[k].grad for k in sorted(raw)]))
     assert vals["chunked"][0] == pytest.approx(vals["full"][0], rel=1e-10)
     assert torch.allclose(vals["chunked"][1], vals["full"][1], rtol=1e-8, atol=1e-8)
+
+
+@pytest.mark.parametrize("family", gp.KERNELS)
+def test_bound_with_gap_step_is_exact_and_chunks(family):
+    rng = np.random.default_rng(9)
+    x = random_inputs(120, seed=10)
+    xt = torch.as_tensor(x, dtype=gp.DTYPE)
+    y, e = (torch.as_tensor(rng.normal(size=120), dtype=gp.DTYPE) for _ in range(2))
+    s = torch.as_tensor((rng.uniform(size=120) > 0.4).astype(float), dtype=gp.DTYPE)
+    n = torch.as_tensor(rng.integers(1, 4, 120).astype(float), dtype=gp.DTYPE)
+    p = P | {"beta2": torch.tensor(0.8, dtype=gp.DTYPE)}
+    model = gp.GP(family, {"jitter": 1e-10, "gap_step": True}, z=x)
+    exact = float(gp.exact_log_marginal(family, p, xt, y, e, n, s))
+    assert float(model.bound(p, xt, y, e, n, s=s)) == pytest.approx(exact, rel=1e-6)
+    assert float(model.bound_chunked(p, xt, y, e, n, 50, s)) == pytest.approx(exact, rel=1e-6)
+    assert exact != pytest.approx(float(gp.exact_log_marginal(family, p, xt, y, e, n)), rel=1e-6)  # s is used
+
+
+def test_fit_with_gap_step_recovers_the_step():
+    rng = np.random.default_rng(11)
+    m = 500
+    lat, lon = rng.uniform(-60, 60, m), rng.uniform(-180, 180, m)
+    time = pd.Timestamp("2020-01-15") + pd.to_timedelta(rng.integers(0, 81, m) * 30.44, unit="D")
+    s = (time >= pd.Timestamp("2021-09-01")).astype(float)
+    x = gp.embed(lat, lon, time, "2020-01-01")
+    e = rng.normal(230, 25, m)
+    y = 20 + 0.8 * e + 40 * s + 5 * np.sin(np.radians(lon)) + rng.normal(0, 3, m)
+    cfg = {"n_inducing": 60, "restarts": 1, "max_iter": 60, "seed": 0, "jitter": 1e-6, "gap_step": True,
+           "init_sigma_A": 5.0, "init_sigma_B": 5.0, "init_ell_space_A_km": 2000.0, "init_ell_season_days": 60.0,
+           "init_ell_space_B_km": 4000.0, "init_ell_time_years": 1.0, "init_sigma0": 5.0, "init_sigma1": 5.0}
+    model = gp.GP("matern32", cfg).fit(x, y, e, np.ones(m), s=s)
+    b0, b1, b2 = model.coefficients()
+    assert b2 == pytest.approx(40, abs=5) and b1 == pytest.approx(0.8, abs=0.1)
+    assert model.hyperparameters()["beta2_wm2"] == b2
+    with pytest.raises(ValueError):
+        model.predict(x[:5], e[:5])  # a forgotten post_gap must not silently drop the step
+    pre, post = (model.predict(x[:50], e[:50], s=np.full(50, v)) for v in (0.0, 1.0))
+    assert np.allclose(post["mean"] - pre["mean"], b2) and np.allclose(post["latent_var"], pre["latent_var"])
+    back = gp.GP.from_state(model.state())
+    assert back.step and np.allclose(back.predict(x[:50], e[:50], s=np.ones(50))["mean"], post["mean"])
+    # without the gap step, s is ignored and beta2 stays a fixed 0
+    plain = gp.GP("matern32", dict(cfg, gap_step=False, max_iter=5)).fit(x, y, e, np.ones(m), s=s)
+    assert plain.coefficients()[2] == 0.0 and float(plain.raw["beta2"]) == 0.0
