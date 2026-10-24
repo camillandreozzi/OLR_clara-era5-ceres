@@ -1,0 +1,2 @@
+kernel,bound,n_evals,n_inducing,beta0_wm2,beta1,beta2_wm2,sigma_A_wm2,ell_space_A_km,ell_space_A_chord,ell_season_days,ell_season_chord,sigma_B_wm2,ell_space_B_km,ell_space_B_chord,ell_time_years,sigma0_wm2,sigma1_wm2,era5_radius_km,n_train,fit_seconds,train_r_R0,train_r_R300,train_r_R600,train_r_R1000,train_r_R1500
+exponential,-39647.1,119,1000,55.493,0.54642,13.4765,9.0467,20015.1,52.8099,182.625,19.8644,23.6182,20015.1,8.10311,3.159,0.00442443,45.5643,600,37898,1258.12,0.380081,0.381138,0.382511,0.381547,0.375051

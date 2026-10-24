@@ -1,0 +1,7 @@
+cv_type,kernel,vs,mean_rmse_diff,ci95_lo,ci95_hi,folds,distinguishable
+spatial,gaussian,exponential,0.1706,-0.1295,0.4340,18,False
+spatial,matern32,exponential,0.0807,-0.1245,0.2913,18,False
+temporal,gaussian,exponential,-0.5624,-1.6771,0.3909,13,False
+temporal,matern32,exponential,0.9045,-0.1069,1.9892,13,False
+joint,gaussian,exponential,0.9049,-0.0160,2.0476,18,False
+joint,matern32,exponential,0.2011,-0.5400,1.1307,18,False

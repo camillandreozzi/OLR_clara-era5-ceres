@@ -1,0 +1,2 @@
+kernel,bound,n_evals,n_inducing,beta0_wm2,beta1,beta2_wm2,sigma_A_wm2,ell_space_A_km,ell_space_A_chord,ell_season_days,ell_season_chord,sigma_B_wm2,ell_space_B_km,ell_space_B_chord,ell_time_years,sigma0_wm2,sigma1_wm2,era5_radius_km,n_train,fit_seconds,train_r_R0,train_r_R300,train_r_R600,train_r_R1000,train_r_R1500
+gaussian,-38546.2,79,1000,58.9868,0.465472,25.2636,10.1747,1916.86,0.299739,168.984,1.98625,16.8086,3658.81,0.566431,0.156492,0.00222637,44.0027,600,37898,940.698,0.380081,0.381138,0.382511,0.381547,0.375051

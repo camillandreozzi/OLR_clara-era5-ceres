@@ -61,4 +61,4 @@ bootstrap_samples = 2000
 # Baselines scored on the same CV folds as the kernels (src/baselines.py; run_cv.py --model, --group baselines).
 # The regression-only models (linear, linear_noera5) always run. The GP without ERA5 uses the winning kernel:
 # set this to the first row of results/model/kernel_comparison.csv once the kernel CV has finished.
-gp_noera5_kernels = []
+gp_noera5_kernels = ["exponential"]  # 5 deg winner, kernel_comparison.csv of 2026-10-24

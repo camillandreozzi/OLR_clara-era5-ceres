@@ -1,0 +1,2 @@
+kernel,bound,n_evals,beta0_wm2,beta1,beta2_wm2,sigma0_wm2,sigma1_wm2,era5_radius_km,n_train,fit_seconds
+none,-48735.7,14,170.863,0,15.2408,10.3705,56.2122,,37898,1.02064
