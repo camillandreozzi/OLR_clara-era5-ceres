@@ -154,10 +154,10 @@ def model_section(cfg):
         "",
         "### Regression (mean function)",
         "",
-        "$$",
+        "```math",
         r"\mathrm{OLR}^{\mathrm{CLARA}}_i = \underbrace{\beta_0 + \beta_1\,\mathrm{OLR}^{\mathrm{ERA5}}_i"
         r" + \beta_2\,s_i}_{\text{regression}} + \underbrace{f(\mathbf{x}_i)}_{\text{GP}} + \varepsilon_i",
-        "$$",
+        "```",
         "",
         r"- $y_i \equiv \mathrm{OLR}^{\mathrm{CLARA}}_i$ is the mean of the quality-controlled CLARA samples in the "
         r"cell-month (W m⁻²). They come from $n_i$ distinct overpasses.",
@@ -174,22 +174,22 @@ def model_section(cfg):
         "The regression residual is split into a spatio-temporally correlated part $f$ and independent noise "
         r"$\varepsilon$, with $f$ independent of $\varepsilon$:",
         "",
-        "$$",
+        "```math",
         r"y_i - \mathbf{h}_i^\top\boldsymbol\beta = f(\mathbf{x}_i) + \varepsilon_i, \qquad "
         r"f \sim \mathcal{GP}\big(0,\ k_\theta(\mathbf{x}, \mathbf{x}')\big), \qquad "
         r"\varepsilon_i \overset{\text{ind}}{\sim} \mathcal{N}\!\left(0,\ \sigma_0^2 + \frac{\sigma_1^2}{n_i}\right)",
-        "$$",
+        "```",
         "",
         r"- **Noise.** $\sigma_1^2$ is the sampling variance of one overpass. Samples along one overpass are strongly "
         r"correlated, so the overpass is the independent unit and this part shrinks as $1/n_i$. $\sigma_0^2$ is "
         "noise that does not average out with more overpasses.",
         r"- **Joint likelihood.** Stacked over the $N$ training cell-months:",
         "",
-        "$$",
+        "```math",
         r"\mathbf{y} \sim \mathcal{N}\big(\mathbf{H}\boldsymbol\beta,\ \mathbf{K}_\theta + \mathbf{D}\big), \qquad "
         r"[\mathbf{K}_\theta]_{ij} = k_\theta(\mathbf{x}_i, \mathbf{x}_j), \qquad "
         r"\mathbf{D} = \mathrm{diag}\!\left(\sigma_0^2 + \sigma_1^2/n_i\right)",
-        "$$",
+        "```",
         "",
         r"  $\boldsymbol\beta$ and $\theta$ are estimated **jointly** from this likelihood. It is not a two-step fit "
         "(regression first, then a GP on its residuals): as in generalised least squares, the regression "
@@ -198,11 +198,11 @@ def model_section(cfg):
         "### Covariance function",
         r"Each cell-month enters through $\mathbf{x} = (\mathbf{u}, \mathbf{c}, t)$:",
         "",
-        "$$",
+        "```math",
         r"\mathbf{u} = (\cos\varphi\cos\lambda,\ \cos\varphi\sin\lambda,\ \sin\varphi), \qquad "
         r"\mathbf{c} = (\cos 2\pi\tau,\ \sin 2\pi\tau), \qquad "
         rf"t = \text{{years since {cfg['time']['origin']}}}",
-        "$$",
+        "```",
         "",
         r"Here $\varphi, \lambda$ are the latitude and longitude of the cell centre, and $\tau \in [0, 1)$ is the "
         r"fraction of the year at mid-month. $\lVert\mathbf{u} - \mathbf{u}'\rVert = 2\sin(d / 2R_\oplus)$ is the "
@@ -211,16 +211,16 @@ def model_section(cfg):
         r"On the seasonal circle $\mathbf{c}$, December is next to January. The covariance has two additive "
         "components:",
         "",
-        "$$",
+        "```math",
         r"k_\theta(\mathbf{x}, \mathbf{x}') = \sigma_A^2\,\kappa(r_A) + \sigma_B^2\,\kappa(r_B)",
-        "$$",
+        "```",
         "",
-        "$$",
+        "```math",
         r"r_A^2 = \frac{\lVert\mathbf{u} - \mathbf{u}'\rVert^2}{\ell_{\text{space},A}^2} "
         r"+ \frac{\lVert\mathbf{c} - \mathbf{c}'\rVert^2}{\ell_{\text{season}}^2}, \qquad "
         r"r_B^2 = \frac{\lVert\mathbf{u} - \mathbf{u}'\rVert^2}{\ell_{\text{space},B}^2} "
         r"+ \frac{(t - t')^2}{\ell_{\text{time}}^2}",
-        "$$",
+        "```",
         "",
         "- **Component A (space × season)** is a CLARA − ERA5 discrepancy pattern that recurs every year.",
         "- **Component B (space × long-term time)** holds changes that do not recur: drift beyond the step, and "
@@ -234,37 +234,44 @@ def model_section(cfg):
         "|---|---|---|",
         r"| Exponential | $e^{-r}$ | continuous, not differentiable |",
         r"| Gaussian (SE) | $e^{-r^2/2}$ | infinitely differentiable |",
-        r"| Matérn 3/2 | $(1 + \sqrt{3}\,r)\,e^{-\sqrt{3}\,r}$ | once differentiable |",
+        r"| Matérn 3/2 | $(1 + \sqrt{3}r)e^{-\sqrt{3}r}$ | once differentiable |",
         "",
         "All three are valid covariances here because $r_A$ and $r_B$ are scaled Euclidean distances (chords). With "
         "great-circle distance, the Gaussian and Matérn 3/2 kernels would not be positive definite on the sphere.",
         "",
         "### Prediction",
-        r"At a cell-month $\mathbf{x}_*$ with ERA5 $e_*$ and step $s_*$, the target is the monthly-mean CLARA OLR "
-        r"$\mu_* = \mathbf{h}_*^\top\boldsymbol\beta + f(\mathbf{x}_*)$. For an exact GP its posterior is",
+        "At a new cell-month (marked ∗), the target is its monthly-mean CLARA OLR, with the covariances to the "
+        "training cell-months collected in a vector:",
         "",
-        "$$",
-        r"\mathbb{E}[\mu_* \mid \mathbf{y}] = \mathbf{h}_*^\top\hat{\boldsymbol\beta} "
-        r"+ \mathbf{k}_*^\top(\mathbf{K}_\theta + \mathbf{D})^{-1}(\mathbf{y} - \mathbf{H}\hat{\boldsymbol\beta}), "
-        r"\qquad \mathrm{Var}[\mu_* \mid \mathbf{y}] = k_\theta(\mathbf{x}_*, \mathbf{x}_*) "
-        r"- \mathbf{k}_*^\top(\mathbf{K}_\theta + \mathbf{D})^{-1}\mathbf{k}_*",
-        "$$",
+        "```math",
+        r"\mu_{\ast} = \mathbf{h}_{\ast}^\top\boldsymbol\beta + f(\mathbf{x}_{\ast}), \qquad "
+        r"\mathbf{h}_{\ast} = (1, e_{\ast}, s_{\ast})^\top, \qquad "
+        r"[\mathbf{k}_{\ast}]_i = k_\theta(\mathbf{x}_i, \mathbf{x}_{\ast})",
+        "```",
         "",
-        r"with $[\mathbf{k}_*]_i = k_\theta(\mathbf{x}_i, \mathbf{x}_*)$. The fitted model uses the sparse "
-        "version of the same formulas (next subsection):",
+        "For an exact GP its posterior is",
         "",
-        "$$",
-        r"\mathbb{E}[\mu_* \mid \mathbf{y}] = \mathbf{h}_*^\top\hat{\boldsymbol\beta} "
-        r"+ \mathbf{k}_{*u}\boldsymbol\Sigma\mathbf{K}_{uf}\mathbf{D}^{-1}(\mathbf{y} - \mathbf{H}\hat{\boldsymbol\beta}), "
-        r"\qquad \mathrm{Var}[\mu_* \mid \mathbf{y}] = k_{**} - \mathbf{k}_{*u}\mathbf{K}_{uu}^{-1}\mathbf{k}_{u*} "
-        r"+ \mathbf{k}_{*u}\boldsymbol\Sigma\mathbf{k}_{u*}, \qquad "
+        "```math",
+        r"\mathbb{E}[\mu_{\ast} \mid \mathbf{y}] = \mathbf{h}_{\ast}^\top\hat{\boldsymbol\beta} "
+        r"+ \mathbf{k}_{\ast}^\top(\mathbf{K}_\theta + \mathbf{D})^{-1}(\mathbf{y} - \mathbf{H}\hat{\boldsymbol\beta}), "
+        r"\qquad \mathrm{Var}[\mu_{\ast} \mid \mathbf{y}] = k_\theta(\mathbf{x}_{\ast}, \mathbf{x}_{\ast}) "
+        r"- \mathbf{k}_{\ast}^\top(\mathbf{K}_\theta + \mathbf{D})^{-1}\mathbf{k}_{\ast}",
+        "```",
+        "",
+        "The fitted model uses the sparse version of the same formulas (next subsection):",
+        "",
+        "```math",
+        r"\mathbb{E}[\mu_{\ast} \mid \mathbf{y}] = \mathbf{h}_{\ast}^\top\hat{\boldsymbol\beta} "
+        r"+ \mathbf{k}_{\ast u}\boldsymbol\Sigma\mathbf{K}_{uf}\mathbf{D}^{-1}(\mathbf{y} - \mathbf{H}\hat{\boldsymbol\beta}), "
+        r"\qquad \mathrm{Var}[\mu_{\ast} \mid \mathbf{y}] = k_{\ast\ast} - \mathbf{k}_{\ast u}\mathbf{K}_{uu}^{-1}\mathbf{k}_{u\ast} "
+        r"+ \mathbf{k}_{\ast u}\boldsymbol\Sigma\mathbf{k}_{u\ast}, \qquad "
         r"\boldsymbol\Sigma = \big(\mathbf{K}_{uu} + \mathbf{K}_{uf}\mathbf{D}^{-1}\mathbf{K}_{fu}\big)^{-1}",
-        "$$",
+        "```",
         "",
-        r"- **Maps.** The uncertainty maps show the latent SD, $\sqrt{\mathrm{Var}[\mu_* \mid \mathbf{y}]}$.",
-        r"- **Scoring.** Against a held-out CLARA cell-month from $n_*$ overpasses (interval coverage, CRPS, NLPD), "
-        r"the noise is added: $\mathrm{Var}[y_* \mid \mathbf{y}] = \mathrm{Var}[\mu_* \mid \mathbf{y}] "
-        r"+ \sigma_0^2 + \sigma_1^2 / n_*$.",
+        r"- **Maps.** The uncertainty maps show the latent SD, $\sqrt{\mathrm{Var}[\mu_{\ast} \mid \mathbf{y}]}$.",
+        r"- **Scoring.** Against a held-out CLARA cell-month from $n_{\ast}$ overpasses (interval coverage, CRPS, NLPD), "
+        r"the noise is added: $\mathrm{Var}[y_{\ast} \mid \mathbf{y}] = \mathrm{Var}[\mu_{\ast} \mid \mathbf{y}] "
+        r"+ \sigma_0^2 + \sigma_1^2 / n_{\ast}$.",
         r"- **Plug-in.** $\hat{\boldsymbol\beta}$ and $\hat\theta$ are plugged in; their uncertainty is not "
         "propagated.",
         "",
@@ -276,12 +283,12 @@ def model_section(cfg):
         r"a fold. $\boldsymbol\beta$ and $\theta$ maximise a lower bound on the log marginal likelihood, extended "
         r"here to the heteroscedastic noise $\mathbf{D}$:",
         "",
-        "$$",
+        "```math",
         r"\log p(\mathbf{y} \mid \boldsymbol\beta, \theta) \;\ge\; \mathcal{F}(\boldsymbol\beta, \theta) = "
         r"\log \mathcal{N}\big(\mathbf{y} \mid \mathbf{H}\boldsymbol\beta,\ \mathbf{Q}_{ff} + \mathbf{D}\big) "
         r"- \tfrac{1}{2}\mathrm{tr}\big(\mathbf{D}^{-1}(\mathbf{K}_{ff} - \mathbf{Q}_{ff})\big), \qquad "
         r"\mathbf{Q}_{ff} = \mathbf{K}_{fu}\mathbf{K}_{uu}^{-1}\mathbf{K}_{uf}",
-        "$$",
+        "```",
         "",
         "- **Optimiser.** L-BFGS (type-II maximum likelihood), started from fixed, data-independent values. "
         f"The starts scale the initial length scales by {starts}, and the best bound wins.",
@@ -301,10 +308,14 @@ def model_section(cfg):
         r"| constant per period (no GP, no ERA5) | $\beta_0 + \beta_2 s$ | $\mathbf{D}$ |",
         "",
         r"Without the GP ($f \equiv 0$) the likelihood is exact. For fixed $(\sigma_0, \sigma_1)$, $\boldsymbol\beta$ "
-        r"is the GLS estimate $\hat{\boldsymbol\beta} = (\mathbf{H}^\top\mathbf{D}^{-1}\mathbf{H})^{-1}"
-        r"\mathbf{H}^\top\mathbf{D}^{-1}\mathbf{y}$, and $(\sigma_0, \sigma_1)$ maximise the profile likelihood. The "
-        r"latent variance of a prediction is $\mathbf{h}_*^\top(\mathbf{H}^\top\mathbf{D}^{-1}\mathbf{H})^{-1}"
-        r"\mathbf{h}_*$.",
+        r"is the GLS estimate (left), and $(\sigma_0, \sigma_1)$ maximise the profile likelihood. A prediction's "
+        "latent variance is on the right:",
+        "",
+        "```math",
+        r"\hat{\boldsymbol\beta} = (\mathbf{H}^\top\mathbf{D}^{-1}\mathbf{H})^{-1}\mathbf{H}^\top\mathbf{D}^{-1}\mathbf{y}, "
+        r"\qquad \mathrm{Var}[\mu_{\ast} \mid \mathbf{y}] = "
+        r"\mathbf{h}_{\ast}^\top(\mathbf{H}^\top\mathbf{D}^{-1}\mathbf{H})^{-1}\mathbf{h}_{\ast}",
+        "```",
         "",
         r"Everything learned from data is learned per CV fold, on its training rows only: $R$, the standardisation, "
         r"$\mathbf{Z}$, $\boldsymbol\beta$ and $\theta$.",
