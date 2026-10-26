@@ -188,7 +188,7 @@ def model_section(cfg):
         "$$",
         r"\mathbf{y} \sim \mathcal{N}\big(\mathbf{H}\boldsymbol\beta,\ \mathbf{K}_\theta + \mathbf{D}\big), \qquad "
         r"[\mathbf{K}_\theta]_{ij} = k_\theta(\mathbf{x}_i, \mathbf{x}_j), \qquad "
-        r"\mathbf{D} = \operatorname{diag}\!\left(\sigma_0^2 + \sigma_1^2/n_i\right)",
+        r"\mathbf{D} = \mathrm{diag}\!\left(\sigma_0^2 + \sigma_1^2/n_i\right)",
         "$$",
         "",
         r"  $\boldsymbol\beta$ and $\theta$ are estimated **jointly** from this likelihood. It is not a two-step fit "
@@ -246,7 +246,7 @@ def model_section(cfg):
         "$$",
         r"\mathbb{E}[\mu_* \mid \mathbf{y}] = \mathbf{h}_*^\top\hat{\boldsymbol\beta} "
         r"+ \mathbf{k}_*^\top(\mathbf{K}_\theta + \mathbf{D})^{-1}(\mathbf{y} - \mathbf{H}\hat{\boldsymbol\beta}), "
-        r"\qquad \operatorname{Var}[\mu_* \mid \mathbf{y}] = k_\theta(\mathbf{x}_*, \mathbf{x}_*) "
+        r"\qquad \mathrm{Var}[\mu_* \mid \mathbf{y}] = k_\theta(\mathbf{x}_*, \mathbf{x}_*) "
         r"- \mathbf{k}_*^\top(\mathbf{K}_\theta + \mathbf{D})^{-1}\mathbf{k}_*",
         "$$",
         "",
@@ -256,14 +256,14 @@ def model_section(cfg):
         "$$",
         r"\mathbb{E}[\mu_* \mid \mathbf{y}] = \mathbf{h}_*^\top\hat{\boldsymbol\beta} "
         r"+ \mathbf{k}_{*u}\boldsymbol\Sigma\mathbf{K}_{uf}\mathbf{D}^{-1}(\mathbf{y} - \mathbf{H}\hat{\boldsymbol\beta}), "
-        r"\qquad \operatorname{Var}[\mu_* \mid \mathbf{y}] = k_{**} - \mathbf{k}_{*u}\mathbf{K}_{uu}^{-1}\mathbf{k}_{u*} "
+        r"\qquad \mathrm{Var}[\mu_* \mid \mathbf{y}] = k_{**} - \mathbf{k}_{*u}\mathbf{K}_{uu}^{-1}\mathbf{k}_{u*} "
         r"+ \mathbf{k}_{*u}\boldsymbol\Sigma\mathbf{k}_{u*}, \qquad "
         r"\boldsymbol\Sigma = \big(\mathbf{K}_{uu} + \mathbf{K}_{uf}\mathbf{D}^{-1}\mathbf{K}_{fu}\big)^{-1}",
         "$$",
         "",
-        r"- **Maps.** The uncertainty maps show the latent SD, $\sqrt{\operatorname{Var}[\mu_* \mid \mathbf{y}]}$.",
+        r"- **Maps.** The uncertainty maps show the latent SD, $\sqrt{\mathrm{Var}[\mu_* \mid \mathbf{y}]}$.",
         r"- **Scoring.** Against a held-out CLARA cell-month from $n_*$ overpasses (interval coverage, CRPS, NLPD), "
-        r"the noise is added: $\operatorname{Var}[y_* \mid \mathbf{y}] = \operatorname{Var}[\mu_* \mid \mathbf{y}] "
+        r"the noise is added: $\mathrm{Var}[y_* \mid \mathbf{y}] = \mathrm{Var}[\mu_* \mid \mathbf{y}] "
         r"+ \sigma_0^2 + \sigma_1^2 / n_*$.",
         r"- **Plug-in.** $\hat{\boldsymbol\beta}$ and $\hat\theta$ are plugged in; their uncertainty is not "
         "propagated.",
@@ -279,7 +279,7 @@ def model_section(cfg):
         "$$",
         r"\log p(\mathbf{y} \mid \boldsymbol\beta, \theta) \;\ge\; \mathcal{F}(\boldsymbol\beta, \theta) = "
         r"\log \mathcal{N}\big(\mathbf{y} \mid \mathbf{H}\boldsymbol\beta,\ \mathbf{Q}_{ff} + \mathbf{D}\big) "
-        r"- \tfrac{1}{2}\operatorname{tr}\big(\mathbf{D}^{-1}(\mathbf{K}_{ff} - \mathbf{Q}_{ff})\big), \qquad "
+        r"- \tfrac{1}{2}\mathrm{tr}\big(\mathbf{D}^{-1}(\mathbf{K}_{ff} - \mathbf{Q}_{ff})\big), \qquad "
         r"\mathbf{Q}_{ff} = \mathbf{K}_{fu}\mathbf{K}_{uu}^{-1}\mathbf{K}_{uf}",
         "$$",
         "",
