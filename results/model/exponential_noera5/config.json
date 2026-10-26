@@ -1,0 +1,70 @@
+{
+  "qc": {
+    "night_sza_min": 100.0,
+    "vza_max": 60.0,
+    "overpass_gap_min": 20.0
+  },
+  "grid": {
+    "res_deg": 5
+  },
+  "era5": {
+    "night_sza_min": 100.0,
+    "smoothing_radii_km": [
+      0.0,
+      300.0,
+      600.0,
+      1000.0,
+      1500.0
+    ]
+  },
+  "time": {
+    "origin": "2020-01-01",
+    "first_month": "2020-01",
+    "last_month": "2026-09",
+    "gap_start": "2021-09",
+    "gap_end": "2022-05"
+  },
+  "gp": {
+    "kernels": [
+      "exponential",
+      "gaussian",
+      "matern32"
+    ],
+    "gap_step": true,
+    "n_inducing": 1000,
+    "restarts": 3,
+    "max_iter": 200,
+    "seed": 20261022,
+    "jitter": 1e-06,
+    "threads": 8,
+    "chunk_size": 20000,
+    "init_sigma_A": 15.0,
+    "init_sigma_B": 15.0,
+    "init_ell_space_A_km": 2000.0,
+    "init_ell_season_days": 60.0,
+    "init_ell_space_B_km": 4000.0,
+    "init_ell_time_years": 1.0,
+    "init_sigma0": 15.0,
+    "init_sigma1": 30.0
+  },
+  "cv": {
+    "spatial_block_lat": 60.0,
+    "spatial_block_lon": 60.0,
+    "spatial_buffer_km": 1500.0,
+    "temporal_window_months": 6,
+    "temporal_buffer_months": 1,
+    "joint_block_lat": 60.0,
+    "joint_block_lon": 60.0,
+    "joint_window_months": 6,
+    "joint_buffer_km": 1500.0,
+    "joint_buffer_months": 1,
+    "joint_n_folds": 18,
+    "bootstrap_samples": 2000
+  },
+  "baselines": {
+    "gp_noera5_kernels": [
+      "exponential"
+    ]
+  },
+  "_path": "config/pipeline_euler.toml"
+}

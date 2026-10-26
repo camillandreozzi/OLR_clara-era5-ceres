@@ -25,3 +25,6 @@ results/model/*/grid_predictions.csv
 
 # Archived outputs of the 1 deg grid (local only; delete when no longer needed)
 results/*_1deg/
+
+# Conference overview slide (local only)
+slide/

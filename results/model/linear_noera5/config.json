@@ -62,7 +62,9 @@
     "bootstrap_samples": 2000
   },
   "baselines": {
-    "gp_noera5_kernels": []
+    "gp_noera5_kernels": [
+      "exponential"
+    ]
   },
   "_path": "config/pipeline_euler.toml"
 }
