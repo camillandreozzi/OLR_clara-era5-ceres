@@ -278,6 +278,11 @@ bash euler/submit_baselines.sh   # adds the 50 fits of the GP without ERA5 (arra
 Failed GP-without-ERA5 tasks rerun with `GROUP=baselines sbatch --array=<ids> euler/fit_array.sbatch`.
 `results/model/missing_baseline_tasks.csv` lists them.
 
+**Sparse-GP benchmark.** `sbatch euler/benchmark.sbatch` runs `benchmark_gp.py` with the Euler config, one
+kernel per array task: VFE against the exact GP, then M = 250, 500, 1000 and 2000 on one spatial fold. It
+writes `results/model/benchmark/{vfe_vs_exact,m_sensitivity}_<kernel>.csv`. `bash euler/check.sh` reports
+the queue, failed jobs and missing fits of every stage.
+
 **Restarting after a grid or fold change.** Outputs in `results/model/` are valid only for the folds they
 were made with, and finished fits are skipped. `run_cv.py --make-folds` therefore refuses to write new folds
 while `results/model/` holds fits of other folds. To restart, first cancel the queued jobs. Cancel the

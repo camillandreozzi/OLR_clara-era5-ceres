@@ -56,7 +56,7 @@ def status_table():
         ("Phase 3 decisions", R / "preprocessing/decisions.md"),
         ("CV folds", R / "model/folds.csv"),
         ("Benchmark: VFE vs exact GP (3,000-row subset)", R / "model/benchmark/vfe_vs_exact_exponential.csv"),
-        ("Benchmark: M sensitivity at full scale (deferred)", R / "model/benchmark/m_sensitivity.csv"),
+        ("Benchmark: M sensitivity at full scale", R / "model/benchmark/m_sensitivity_exponential.csv"),
     ]
     for k in KERNELS:
         for t in ("spatial", "temporal", "joint"):

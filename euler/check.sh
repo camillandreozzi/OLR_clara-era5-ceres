@@ -10,7 +10,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 source euler/modules.sh
 source "$VENV/bin/activate"
-JOBS=olr-gp-prep,olr-gp-fit,olr-gp-summary,olr-linear
+JOBS=olr-gp-prep,olr-gp-fit,olr-gp-summary,olr-linear,olr-gp-bench
 
 echo "== 1. queue"
 QUEUED=$(squeue -h -u "$USER" --name="$JOBS" | wc -l)
@@ -33,6 +33,7 @@ if [ -n "$BAD" ]; then
       olr-gp-prep)    log=logs/prep_$id.out ;;
       olr-gp-summary) log=logs/summary_$id.out ;;
       olr-linear)     log=logs/linear_$id.out ;;
+      olr-gp-bench)   log=logs/bench_$id.out ;;
     esac
     err=$(grep -m1 -E "Error|error:|Killed|oom|TIME LIMIT|CANCELLED" "$log" 2>/dev/null)
     printf "  %-14s %-16s %-10s %s\n      %s\n" "$id" "${state%% *}" "$elapsed" "$log" "${err:-(no error line)}"

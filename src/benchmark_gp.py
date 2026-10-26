@@ -10,7 +10,8 @@
 Output: results/model/benchmark/{vfe_vs_exact.csv, m_sensitivity.csv, summary.md}
 
 Usage:
-    python src/benchmark_gp.py [--fold 7] [--m-values 250 500 1000] [--kernels matern32]
+    python src/benchmark_gp.py [--fold 7] [--m-values 250 500 1000] [--kernels matern32] [--config ...]
+    On Euler: sbatch euler/benchmark.sbatch (one kernel per array task, config/pipeline_euler.toml)
 """
 
 import argparse
@@ -70,7 +71,7 @@ def vfe_vs_exact(cfg, obs, kernels, n_sub=3000, n_test=1000):
 
 
 def m_sensitivity(cfg, obs, fold, m_values, kernels):
-    folds = run_cv.check_folds()
+    folds = run_cv.check_folds(cfg)
     train, test = cv.split(folds, "spatial", fold, obs.obs_id.to_numpy())
     x = run_cv.inputs(obs, cfg)
     radius, _ = run_cv.choose_radius(obs, train, cfg["era5"]["smoothing_radii_km"])
@@ -105,9 +106,11 @@ def main():
     parser.add_argument("--skip-exact", action="store_true")
     parser.add_argument("--kernels", nargs="+", choices=gp.KERNELS, default=list(gp.KERNELS),
                         help="kernels to benchmark (run one per process to parallelise)")
+    parser.add_argument("--config", help="configuration file (default config/pipeline.toml)")
     args = parser.parse_args()
     tag = "" if len(args.kernels) == 3 else "_" + "_".join(args.kernels)
-    cfg = config.load()
+    cfg = config.load(args.config)
+    config.MODEL_DIR = config.RESULTS_DIR / cfg.get("output", {}).get("model_dir", "model")
     torch.set_num_threads(cfg["gp"]["threads"])
     obs = run_cv.load_obs(cfg)
     out = config.MODEL_DIR / "benchmark"
