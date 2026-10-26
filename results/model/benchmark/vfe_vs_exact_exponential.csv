@@ -1,0 +1,2 @@
+kernel,n_train,n_inducing,vfe_bound,exact_lml,bound_gap_per_obs,rmse_vfe,rmse_exact,max_abs_mean_diff,rms_mean_diff,median_sd_ratio_vfe_over_exact,fit_seconds,beta0_wm2,beta1,beta2_wm2,sigma_A_wm2,ell_space_A_km,ell_season_days,sigma_B_wm2,ell_space_B_km,ell_time_years,sigma0_wm2,sigma1_wm2
+exponential,3000,1000,-3247.7,-3228.6,0.0063504,38.236,38.195,1.1808,0.3027,1.0101,26.036,44.957,0.52133,32.128,0.00486,20015,182.62,11.286,20015,0.47679,0.00059564,47.004

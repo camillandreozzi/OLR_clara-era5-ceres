@@ -540,6 +540,37 @@ def main():
                       "(one inducing input per 3 observations); ")
     else:
         exact_note = "The approximation was not compared with the exact GP; "
+    ms = [v for k in KERNELS if (v := read(R / f"model/benchmark/m_sensitivity_{k}.csv")) is not None]
+    m_table = []
+    if ms:
+        ms = pd.concat(ms)
+        rmse = ms.pivot(index="M", columns="kernel", values="rmse")
+        bpo = ms.pivot(index="M", columns="kernel", values="bound_per_obs")
+        spread = rmse.max() - rmse.min()
+        orders = {m: tuple(r.sort_values().index) for m, r in rmse.iterrows()}
+        label = lambda o: ", ".join(KERNEL_LABELS[k] for k in o)
+        ranking = (f"the kernel ranking is the same at every M (lowest RMSE first: {label(orders[rmse.index[0]])})"
+                   if len(set(orders.values())) == 1 else
+                   "the kernel ranking changes with M (" + "; ".join(f"M = {m}: {label(o)}" for m, o in orders.items()) + ")")
+        m_ref = max(m_fit) if max(m_fit) in bpo.index else bpo.index[0]
+        f0 = ms.iloc[0]
+        m_note = (f"At that scale, on spatial fold {int(f0.fold)} ({int(f0.n_train):,} training and {int(f0.n_test):,} "
+                  f"test cell-months), M = {', '.join(map(str, rmse.index))} changes the out-of-sample RMSE by at most "
+                  + ", ".join(f"{spread[k]:.2f} ({KERNEL_LABELS[k]})" for k in rmse.columns) + " W m⁻², and "
+                  + ranking + ". The bound per observation still rises with M (by up to "
+                  f"{(bpo.iloc[-1] - bpo.loc[m_ref]).max():.3f} from M = {m_ref} to {rmse.index.max()}): the likelihood "
+                  "approximation has not converged, but the predictions are stable (table below; "
+                  "`results/model/benchmark/m_sensitivity_*.csv`). Kernel differences smaller than a kernel's own "
+                  "change across M are not decisive.")
+        t = pd.concat([rmse.rename(columns=lambda k: f"RMSE {KERNEL_LABELS[k]}"),
+                       bpo.rename(columns=lambda k: f"bound/obs {KERNEL_LABELS[k]}")], axis=1).reset_index()
+        t["M"] = t.M.astype(int).astype(str)  # md() would print the integer M as a float
+        restarts = (fitted[0] if fitted else cfg["gp"])["restarts"]
+        m_table = [f"Sensitivity to M on spatial fold {int(f0.fold)} (M = {m_ref} with the {restarts} starts of "
+                   "the CV fits, the other M with one start):", "", md(t, "{:.3f}"), ""]
+    else:
+        m_note = ("The effect of M at that scale was not measured. Kernel differences of a few tenths of a W m⁻² may "
+                  "therefore partly reflect the approximation.")
     lines += ["## 9. Limitations",
               "- **Calibration step.** The ~40 W m⁻² calibration change inside the 2021-09 → 2022-05 gap enters the "
               "mean function as one global offset β₂ from 2021-09 on. When in the gap it happened is unknown: by "
@@ -560,12 +591,10 @@ def main():
               "monthly means: day-to-day weather (~34 W m⁻² within cell-month SD of daily means) is absorbed as noise.",
               f"- **Approximation.** The sparse (VFE) GP uses M = {', '.join(map(str, m_fit))} fixed k-means inducing "
               "inputs, shared by all kernels in a fold. " + exact_note +
-              f"in the CV folds there is about one per {n_fold / max(m_fit):,.0f}, and the effect of M at that scale "
-              "was not measured. "
-              "Kernel differences of a few tenths of a W m⁻² may therefore partly reflect the approximation.",
+              f"in the CV folds there is about one per {n_fold / max(m_fit):,.0f}. " + m_note,
               "- **Mean-coefficient uncertainty.** β₀ and β₁ are point estimates (type-II maximum likelihood); their "
               "uncertainty is not propagated. With ~3×10⁴ training cell-months it is small relative to the other terms.",
-              ""]
+              ""] + m_table
     lines += ["## Status of every stage", "", md(status_table()), ""]
     (OUT / "report.md").write_text("\n".join(lines) + "\n")
     config.save(cfg, OUT / "config_used.json")
