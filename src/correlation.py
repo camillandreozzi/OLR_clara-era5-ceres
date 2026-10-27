@@ -4,11 +4,13 @@ All three are put on a common res x res deg monthly grid exactly as in plot_raw_
 Earth-viewing samples within [OLR_MIN, OLR_MAX] (OLR_MIN raised per OLR_MIN_FROM) binned by footprint; CERES and ERA5 area-averaged).
 CLARA samples are further limited to a viewing zenith angle of at most --max-vza (default 75 deg), as
 near-limb views see a long slant path through the colder upper atmosphere. A CLARA cell-month is used when it holds at least --min-samples samples. Three pairs are compared,
-each as y against x (bias = y - x):
+each as y against x. CLARA is a radiance (W m-2 sr-1), CERES and ERA5 are fluxes (W m-2), so pairs with CLARA
+report the ratio of means instead of a bias (y - x) and RMSE:
     CLARA vs CERES EBAF,  CLARA vs ERA5,  ERA5 vs CERES EBAF
 
 1. overall   All cell-months where both members of a pair have data, pooled: Pearson r and
-             regression (area weighted, cos(lat)), Spearman r (unweighted), bias, RMSE, std ratio.
+             regression (area weighted, cos(lat)), Spearman r (unweighted), ratio of means, std ratio, and
+             bias and RMSE for ERA5 vs CERES EBAF (both fluxes).
 2. spatial   Per grid cell, the Pearson r of the two monthly time series: over all months, and over
              the months of each year. A cell needs MIN_MONTHS_ALL / MIN_MONTHS_YEAR months with
              both datasets, otherwise it is left blank. p-values are two-sided t-tests (n - 2 dof).
@@ -47,11 +49,13 @@ from scipy import stats
 
 import read_in
 from plot_raw_means import CMAP as COUNT_CMAP, INK, MUTED, RESULTS_DIR, ccrs, load, to_grid
+from style import CLARA_UNIT, FLUX_UNIT, RATIO_UNIT
 
 OUT_DIR = RESULTS_DIR / "correlation"
 
 # (x, y) pairs; y is compared against x.
 PAIRS = [("CERES EBAF", "CLARA"), ("ERA5", "CLARA"), ("CERES EBAF", "ERA5")]
+UNITS = {"CLARA": CLARA_UNIT, "ERA5": FLUX_UNIT, "CERES EBAF": FLUX_UNIT}  # CLARA is a radiance
 PAIR_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"]  # fixed categorical order: blue, orange, aqua
 
 MIN_MONTHS_ALL = 12  # months with both datasets needed for a cell's all-years correlation
@@ -59,7 +63,7 @@ MIN_MONTHS_YEAR = 6  # ... and for a cell's correlation within one year
 MIN_CELLS = 20  # cells needed for a month's pattern correlation and for a correlation map's mean
 P_SIG = 0.05
 MAX_VZA = 75.0  # deg, default CLARA viewing zenith angle limit
-LIMS = (40, 400)  # W m-2, scatter axes; CLARA is kept within [50 (75 in 2024, 90 from 2025), 400]
+LIMS = (40, 400)  # scatter axes (W m-2 and, for CLARA, W m-2 sr-1); CLARA is kept within [50 (75 in 2024, 90 from 2025), 400]
 
 # Diverging blue (positive r) <-> red (negative r) around a neutral grey midpoint.
 CORR_CMAP = LinearSegmentedColormap.from_list("corr", [
@@ -105,9 +109,12 @@ def area_weights(da):
 # Statistics
 # ---------------------------------------------------------------------------
 
-def agreement(x, y, w):
-    """Agreement of y with x (finite 1-D arrays) with weights w; r and the regression are weighted."""
-    keys = ["n", "r", "spearman_r", "mean_x", "mean_y", "bias", "rmse", "std_ratio", "slope", "intercept"]
+def agreement(x, y, w, same_units=True):
+    """Agreement of y with x (finite 1-D arrays) with weights w; r and the regression are weighted.
+
+    ratio is mean_y / mean_x. With same_units=False (CLARA radiance against a flux) bias and rmse are NaN:
+    a difference between a radiance and a flux has no physical meaning."""
+    keys = ["n", "r", "spearman_r", "mean_x", "mean_y", "ratio", "bias", "rmse", "std_ratio", "slope", "intercept"]
     if len(x) < 3:
         return dict.fromkeys(keys, np.nan) | {"n": len(x)}
     w = w / w.sum()
@@ -116,7 +123,8 @@ def agreement(x, y, w):
     vx, vy, cxy = w @ dx ** 2, w @ dy ** 2, w @ (dx * dy)
     slope = cxy / vx
     return {"n": len(x), "r": cxy / np.sqrt(vx * vy), "spearman_r": stats.spearmanr(x, y).statistic,
-            "mean_x": mx, "mean_y": my, "bias": my - mx, "rmse": np.sqrt(w @ (y - x) ** 2),
+            "mean_x": mx, "mean_y": my, "ratio": my / mx, "bias": my - mx if same_units else np.nan,
+            "rmse": np.sqrt(w @ (y - x) ** 2) if same_units else np.nan,
             "std_ratio": np.sqrt(vy / vx), "slope": slope, "intercept": my - slope * mx}
 
 
@@ -168,17 +176,21 @@ def overall(fields, res, grid):
     fig, axes = plt.subplots(1, len(PAIRS), figsize=(16, 5.4), layout="constrained")
     for ax, (xn, yn) in zip(axes, PAIRS):
         x, y, w = pooled(fields[xn], fields[yn])
-        s = agreement(x, y, w)
+        same = UNITS[xn] == UNITS[yn]  # CLARA radiance against a flux: ratio of means instead of bias and RMSE
+        s = agreement(x, y, w, same)
         rows[pair_label(xn, yn)] = s
         hb = ax.hexbin(x, y, gridsize=70, bins="log", mincnt=1, cmap=COUNT_CMAP, extent=LIMS + LIMS)
-        ax.plot(LIMS, LIMS, color=MUTED, lw=1, ls="--", label="1:1")
+        if same:
+            ax.plot(LIMS, LIMS, color=MUTED, lw=1, ls="--", label="1:1")
         ax.plot(LIMS, s["intercept"] + s["slope"] * np.array(LIMS), color=INK, lw=1.5, label="weighted fit")
-        ax.set(xlim=LIMS, ylim=LIMS, aspect="equal",
-               xlabel=f"{xn} OLR (W m$^{{-2}}$)", ylabel=f"{yn} OLR (W m$^{{-2}}$)")
+        ax.set(xlim=LIMS, ylim=LIMS, xlabel=f"{xn} OLR ({UNITS[xn]})", ylabel=f"{yn} OLR ({UNITS[yn]})")
+        if same:
+            ax.set_aspect("equal")
         ax.set_title(pair_label(xn, yn), color=INK, fontsize=11, loc="left")
+        level = (f"bias = {s['bias']:+.1f}   RMSE = {s['rmse']:.1f} {UNITS[yn]}" if same
+                 else f"ratio of means = {s['ratio']:.2f} {RATIO_UNIT}")
         ax.text(0.03, 0.97,
-                f"r = {s['r']:.3f}   Spearman = {s['spearman_r']:.3f}\n"
-                f"bias = {s['bias']:+.1f}   RMSE = {s['rmse']:.1f} W m$^{{-2}}$\n"
+                f"r = {s['r']:.3f}   Spearman = {s['spearman_r']:.3f}\n{level}\n"
                 f"y = {s['slope']:.2f} x {s['intercept']:+.1f}   n = {s['n']:,}",
                 transform=ax.transAxes, va="top", fontsize=9, color=INK,
                 bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"})
@@ -195,7 +207,7 @@ def overall(fields, res, grid):
 
     table = pd.DataFrame(rows).T.rename_axis("pair")
     table.to_csv(out_dir / f"stats_{res}deg.csv", float_format="%.4f")
-    print(f"\noverall ({res} deg):\n{table[['n', 'r', 'spearman_r', 'bias', 'rmse', 'slope']].round(3).to_string()}")
+    print(f"\noverall ({res} deg):\n{table[['n', 'r', 'spearman_r', 'ratio', 'bias', 'rmse', 'slope']].round(3).to_string()}")
     print(f"wrote {out_dir}")
 
 
@@ -281,7 +293,8 @@ def pattern_corr(fields):
     for t in fields["CERES EBAF"].time.values:
         for xn, yn in PAIRS:
             x, y, w = pooled(fields[xn].sel(time=t), fields[yn].sel(time=t))
-            s = agreement(x, y, w) if len(x) >= MIN_CELLS else agreement(x[:0], y[:0], w[:0]) | {"n": len(x)}
+            same = UNITS[xn] == UNITS[yn]
+            s = agreement(x, y, w, same) if len(x) >= MIN_CELLS else agreement(x[:0], y[:0], w[:0]) | {"n": len(x)}
             rows.append({"time": pd.Timestamp(t), "pair": pair_label(xn, yn)} | s)
     return pd.DataFrame(rows).rename(columns={"n": "n_cells"})
 

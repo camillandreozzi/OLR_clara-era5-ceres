@@ -4,7 +4,8 @@ Model (identical for every kernel; only kappa changes):
 
     y_i = beta0 + beta1 * e_i + beta2 * s_i + f(x_i) + eps_i,      eps_i ~ N(0, sigma0^2 + sigma1^2 / n_i)
 
-    y_i   CLARA cell-month mean OLR (W m-2), e_i the night-time ERA5 OLR of the cell-month,
+    y_i   CLARA cell-month mean OLR (radiance, W m-2 sr-1), e_i the night-time ERA5 OLR (flux, W m-2) of the
+          cell-month; beta1 (sr-1) also converts ERA5's flux into CLARA's radiance units.
     s_i   post_gap: 1 from the start of the 2021-22 CLARA data gap on, 0 before (harmonise.post_gap_indicator);
           beta2 is the calibration step across the gap. The term is present when cfg gap_step is true.
     n_i   number of distinct CLARA overpasses behind y_i (samples within one overpass are correlated)
@@ -349,7 +350,7 @@ class GP:
 
     # -- prediction ---------------------------------------------------------
     def _mean_fn(self, e, s=None):
-        """Mean function beta0 + beta1 e [+ beta2 s] in physical units (W m-2)."""
+        """Mean function beta0 + beta1 e [+ beta2 s] in physical units (CLARA's, W m-2 sr-1)."""
         b0, b1, b2 = self.coefficients()
         return b0 + b1 * np.asarray(e, float) + (b2 * s if s is not None else 0.0)
 
@@ -435,7 +436,10 @@ class GP:
         return model
 
     def hyperparameters(self):
-        """Fitted parameters in physical units, with their interpretation-ready names."""
+        """Fitted parameters in physical units, with their interpretation-ready names.
+
+        The *_wm2 values are in CLARA's units, W m-2 sr-1 (beta1 in sr-1); the suffix is kept so the names match
+        the saved hyperparameter tables."""
         p, sy = self._post["p"], self.stats["y_sd"]
         b0, b1, b2 = self.coefficients()
         return {

@@ -39,8 +39,8 @@ import config
 import gp
 import read_in
 import run_cv
-from style import (DIVERGING, INK, KERNEL_LABELS, MUTED, OLR_CMAP, SERIES, UNCERTAINTY_CMAP, ccrs, colorbar,
-                   draw_field, map_axes, plt, save, style_axes, title)
+from style import (CLARA_UNIT, DIVERGING, INK, KERNEL_LABELS, MUTED, OLR_CMAP, SERIES, UNCERTAINTY_CMAP, ccrs,
+                   colorbar, draw_field, map_axes, plt, save, style_axes, title)
 
 
 def load_model(kernel):
@@ -80,14 +80,14 @@ def to_dataset(g, res):
     i = np.round((g.lat.to_numpy() + 90 - res / 2) / res).astype(int)
     j = np.round((g.lon.to_numpy() + 180 - res / 2) / res).astype(int)
     ds = xr.Dataset(coords={"time": months, "lat": lat_c, "lon": lon_c})
-    spec = {"pred_mean": ("W m-2", "GP posterior mean of monthly-mean CLARA night-side OLR"),
-            "mean_fn": ("W m-2", "mean function beta0 + beta1 ERA5 + beta2 post_gap of the prediction"),
-            "latent_sd": ("W m-2", "posterior SD of the monthly-mean CLARA OLR (latent GP)"),
-            "pred_sd_obs1": ("W m-2", "predictive SD of a new CLARA cell-month mean from one overpass"),
-            "clara": ("W m-2", "observed CLARA cell-month mean OLR (QC'd samples)"),
+    spec = {"pred_mean": ("W m-2 sr-1", "GP posterior mean of monthly-mean CLARA night-side OLR"),
+            "mean_fn": ("W m-2 sr-1", "mean function beta0 + beta1 ERA5 + beta2 post_gap of the prediction"),
+            "latent_sd": ("W m-2 sr-1", "posterior SD of the monthly-mean CLARA OLR (latent GP)"),
+            "pred_sd_obs1": ("W m-2 sr-1", "predictive SD of a new CLARA cell-month mean from one overpass"),
+            "clara": ("W m-2 sr-1", "observed CLARA cell-month mean OLR, a radiance (QC'd samples)"),
             "n_overpasses": ("1", "CLARA overpasses behind the observation"),
-            "residual_insample": ("W m-2", "observed - predicted, full-data fit (in-sample)"),
-            "residual_oos_spatial": ("W m-2", "observed - predicted, spatial block CV (out-of-sample)"),
+            "residual_insample": ("W m-2 sr-1", "observed - predicted, full-data fit (in-sample)"),
+            "residual_oos_spatial": ("W m-2 sr-1", "observed - predicted, spatial block CV (out-of-sample)"),
             "era5_night": ("W m-2", "ERA5 night-time OLR used as predictor (darkest hours where night_fallback)"),
             "post_gap": ("1", "1 from the start of the 2021-22 CLARA gap on (post-gap calibration regime), 0 before"),
             "clara_observed": ("1", "1 where CLARA observed the cell-month"),
@@ -125,9 +125,9 @@ def residual_maps(ins, oos, res, lim, head, path):
         ax = map_axes(fig, 1, 2, k + 1)
         mesh = draw_field(ax, v, res, DIVERGING, -lim, lim)
         ok = np.isfinite(v)
-        title(ax, f"{head}\n{lab}: RMSE {np.sqrt(np.nanmean(v ** 2)):.1f} W m$^{{-2}}$, n = {int(ok.sum())}"
+        title(ax, f"{head}\n{lab}: RMSE {np.sqrt(np.nanmean(v ** 2)):.1f} {CLARA_UNIT}, n = {int(ok.sum())}"
               if ok.any() else f"{head}\n{lab}: no data", 9)
-    colorbar(fig, mesh, fig.axes, "residual = observed − predicted (W m$^{-2}$); grey = no CLARA observation",
+    colorbar(fig, mesh, fig.axes, f"residual = observed − predicted ({CLARA_UNIT}); grey = no CLARA observation",
              shrink=0.5)
     save(fig, path, dpi=110)
 
@@ -216,16 +216,16 @@ def main():
             head = f"{t:%Y-%m} · {label} GP" + ("" if n_obs else " · no CLARA data this month (extrapolation)")
             fb = ds.night_fallback.values[k]
             map_one(ds.pred_mean.values[k], res, OLR_CMAP, vmin, vmax,
-                    "predicted CLARA OLR (W m$^{-2}$): posterior mean of the monthly-mean night-side OLR; "
+                    f"predicted CLARA OLR ({CLARA_UNIT}): posterior mean of the monthly-mean night-side OLR; "
                     "hatched = polar day (extrapolation)", f"{head} · predicted CLARA OLR",
                     stem.with_name(stem.name + "_predicted_olr.png"), fallback=fb)
             map_one(ds.latent_sd.values[k], res, UNCERTAINTY_CMAP, 0, umax,
-                    "posterior SD of the monthly-mean CLARA OLR (latent GP, W m$^{-2}$); excludes observation noise; "
+                    f"posterior SD of the monthly-mean CLARA OLR (latent GP, {CLARA_UNIT}); excludes observation noise; "
                     "hatched = polar day", f"{head} · predictive uncertainty (latent SD)",
                     stem.with_name(stem.name + "_uncertainty.png"), extend="max", fallback=fb)
             if n_obs:
                 map_one(ds.clara.values[k], res, OLR_CMAP, vmin, vmax,
-                        "observed CLARA OLR (W m$^{-2}$): mean of QC'd night-side samples; grey = not observed",
+                        f"observed CLARA OLR ({CLARA_UNIT}): mean of QC'd night-side samples; grey = not observed",
                         f"{head} · observed CLARA OLR ({n_obs} cells)", stem.with_name(stem.name + "_observed_olr.png"))
                 residual_maps(ds.residual_insample.values[k], ds.residual_oos_spatial.values[k], res, rlim,
                               f"{head} · residuals", stem.with_name(stem.name + "_residuals.png"))
@@ -239,7 +239,7 @@ def main():
     ax.plot(gm.time, gm.global_mean, color=SERIES[0], lw=2, label="predicted global mean (all cells)")
     ax.plot(gm.time, gm.global_mean + 2 * gm.sd_if_independent, color=MUTED, lw=1, ls=":",
             label="+2 SD if cells were independent (too narrow)")
-    ax.set_ylabel("area-weighted global mean (W m$^{-2}$)", color=INK)
+    ax.set_ylabel(f"area-weighted global mean ({CLARA_UNIT})", color=INK)
     ax.legend(frameon=False, fontsize=8)
     style_axes(ax)
     title(ax, f"{label} GP: monthly global mean of predicted CLARA OLR (polar-day cells: fallback, extrapolated)")

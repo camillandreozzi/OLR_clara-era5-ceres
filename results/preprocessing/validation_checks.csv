@@ -11,4 +11,4 @@ prediction-grid cell-months in polar day (darkest-hours fallback),27146.0,"flagg
 "duplicate (time, lat, lon) in observations",0.0,0
 observations whose post_gap disagrees with the period label,0.0,0
 prediction-grid months with post_gap = 1,61.0,61 (every month from 2021-09)
-"CLARA cell-month means outside [olr_min, 400] W m-2",0.0,0
+"CLARA cell-month means outside [olr_min, 400] W m-2 sr-1",0.0,0

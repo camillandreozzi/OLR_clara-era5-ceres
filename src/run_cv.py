@@ -53,8 +53,8 @@ import baselines
 import config
 import cv
 import gp
-from style import (INK, KERNEL_COLORS, KERNEL_LABELS, MUTED, model_color, model_label, plt, save, style_axes,
-                   title)
+from style import (CLARA_UNIT, INK, KERNEL_COLORS, KERNEL_LABELS, MUTED, model_color, model_label, plt, save,
+                   style_axes, title)
 
 CV_TYPES = ("spatial", "temporal", "joint")
 GROUPS = ("kernels", "baselines")  # task lists: the GP kernels, or the GPs without ERA5
@@ -461,7 +461,7 @@ def model_comparison(cfg, fm, fig_dir):
                     mfc="white" if hollow else model_color(m), mew=1)
             ax.hlines(v.mean(), i - 0.3, i + 0.3, color=model_color(m), lw=2.5)
         ax.set_xticks(range(len(order)), [model_label(m) for m in order], rotation=30, ha="right", fontsize=8)
-        ax.set(ylabel="RMSE (W m$^{-2}$)")
+        ax.set(ylabel=f"RMSE ({CLARA_UNIT})")
         style_axes(ax)
         title(ax, f"{t}: per-fold RMSE (bars: mean over folds)")
     fig.suptitle("GP kernels and baselines on identical folds (hollow: no ERA5)", color=INK, fontsize=11,
@@ -481,7 +481,7 @@ def figures(fm, allpred, fig_dir):
             ax.plot(v.fold + (k_i - 1) * 0.18, v.rmse, "o", color=KERNEL_COLORS[k], ms=6, mec="white", mew=1,
                     label=KERNEL_LABELS[k])
             ax.hlines(v.rmse.mean(), v.fold.min() - 0.4, v.fold.max() + 0.4, color=KERNEL_COLORS[k], lw=1.5)
-        ax.set(xlabel="fold (held-out block)", ylabel="RMSE (W m$^{-2}$)")
+        ax.set(xlabel="fold (held-out block)", ylabel=f"RMSE ({CLARA_UNIT})")
         style_axes(ax)
         title(ax, f"{t}: per-fold RMSE (lines: mean over folds)")
     axes[0].legend(frameon=False, fontsize=9)

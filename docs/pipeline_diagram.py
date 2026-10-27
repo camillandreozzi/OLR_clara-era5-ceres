@@ -141,7 +141,7 @@ def draw():
     arrow(ax, (2.32, y1 + 0.96), (2.7, y1 + 0.96))
 
     stage(ax, 1, 2.5, y1, 4.75, h1, "Read & quality-control")
-    step(ax, 1, 2.7, y1 + 0.2, 1.4, 1.55, "a", "Read", ["unpack archives", "geolocate", "OLR in W m⁻²"],
+    step(ax, 1, 2.7, y1 + 0.2, 1.4, 1.55, "a", "Read", ["unpack, geolocate", "CLARA W m⁻² sr⁻¹", "ERA5 W m⁻²"],
          mono="read_in.py")
     step(ax, 1, 4.25, y1 + 0.2, 1.4, 1.55, "b", "QC", ["SZA > 100°", "VZA ≤ 60°", "overpass ids"],
          mono="samples.py")

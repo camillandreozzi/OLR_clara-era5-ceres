@@ -27,8 +27,8 @@ import read_in
 import samples
 
 OUT_DIR = config.EDA_DIR / "inventory"
-OLR_STEP = 0.65336  # W m-2, quantisation of the raw CLARA OLR (plot_olr_hist.OLR_STEP)
-SUN_VIEW = 1000.0  # W m-2, raw values above this are sun-viewing periods
+OLR_STEP = 0.65336  # W m-2 sr-1, quantisation of the raw CLARA OLR (plot_olr_hist.OLR_STEP)
+SUN_VIEW = 1000.0  # raw values above this are sun-viewing periods
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +196,8 @@ def comparison(olr_files, geo_files, grids, cov, s):
          f"NetCDF4 (cfgrib), one file per year: {len(era)} monthly files, {len(eh)} hour-of-day files",
          f"NetCDF4, {len(ce)} file"),
         ("Variable",
-         "OLR (no units attribute in the file); position: satellite (lat, lon, alt) and boresight footprint",
+         "OLR, a radiance (no units attribute in the file; W m-2 sr-1 per the instrument team); position: "
+         "satellite (lat, lon, alt) and boresight footprint",
          f"ttr '{era.long_name.iloc[0]}' [{era.units.iloc[0]}], GRIB stepType {era.grib_step_type.iloc[0]} "
          f"(monthly) / {eh.grib_step_type.iloc[0] if len(eh) else 'n/a'} (by hour)",
          f"toa_lw_all_mon [{ce.units.iloc[0]}]"),
@@ -226,7 +227,7 @@ def comparison(olr_files, geo_files, grids, cov, s):
          "monthly mean of daily means (24 h, day + night); by-hour product: monthly mean at each UTC hour",
          "monthly mean (24 h)"),
         ("Units / sign",
-         f"behaves as W m-2, positive upward; quantised in steps of {OLR_STEP} W m-2 "
+         f"W m-2 sr-1 (radiance), positive upward; quantised in steps of {OLR_STEP} W m-2 sr-1 "
          f"({used.frac_on_quantisation_grid.mean():.1%} of Earth-range values on the step grid)",
          "J m-2 accumulated per day (monthly) or per hour (by hour), negative upward: "
          "OLR = -ttr/86400 or -ttr/3600",
@@ -234,7 +235,7 @@ def comparison(olr_files, geo_files, grids, cov, s):
         ("Value range",
          f"raw {used.olr_min.min():.0f} .. {used.olr_max.max():.0f}; Earth-viewing usable "
          f"{u.olr.min():.0f} .. {u.olr.max():.0f} (median {u.olr.median():.0f}); QC'd {q.olr.min():.0f} .. "
-         f"{q.olr.max():.0f} (median {q.olr.median():.0f}) W m-2",
+         f"{q.olr.max():.0f} (median {q.olr.median():.0f}) W m-2 sr-1",
          f"OLR {-era.value_max.max() / 86400:.0f} .. {-era.value_min.min() / 86400:.0f} W m-2",
          f"{ce.value_min.iloc[0]:.0f} .. {ce.value_max.iloc[0]:.0f} W m-2"),
         ("Missing values / flags",
@@ -256,7 +257,7 @@ def comparison(olr_files, geo_files, grids, cov, s):
          "model fields (effective resolution several grid lengths); monthly and daily averaging",
          "1 deg monthly, gap-filled ('Energy Balanced and Filled')"),
         ("Physical meaning",
-         "night-side TOA OLR according to the instrument team, not angle-corrected (strong viewing-angle "
+         "night-side TOA OLR radiance according to the instrument team, not angle-corrected (strong viewing-angle "
          "dependence, see EDA); daylit footprints exist from 2023",
          "model TOA all-sky OLR flux (CF toa_outgoing_longwave_flux)", "observed TOA all-sky LW flux"),
     ]

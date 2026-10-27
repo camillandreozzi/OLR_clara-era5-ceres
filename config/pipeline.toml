@@ -3,7 +3,7 @@
 # Physical thresholds are instrument physics, chosen from the EDA diagnostics, never tuned for skill.
 
 [qc]
-# On top of read_in's earth_view & in_range (OLR in [50 (75 from 2024), 400] W m-2):
+# On top of read_in's earth_view & in_range (CLARA OLR in [50 (75 from 2024), 400] W m-2 sr-1):
 night_sza_min = 100.0   # deg, footprint solar zenith angle; CLARA measures OLR on the night side only
 vza_max = 60.0          # deg, viewing zenith angle at the footprint; larger angles see a colder limb path
 overpass_gap_min = 20.0 # min, a gap longer than this starts a new overpass (orbit period ~96 min)
@@ -33,14 +33,14 @@ jitter = 1e-6
 threads = 3            # three kernels run in parallel
 chunk_size = 20000     # rows per chunk of the checkpointed VFE bound (memory O(M x chunk))
 # Data-independent initial values (physical units), shared by every kernel and fold.
-init_sigma_A = 15.0       # W m-2, space x season component
-init_sigma_B = 15.0       # W m-2, space x long-term component
+init_sigma_A = 15.0       # W m-2 sr-1 (CLARA units), space x season component
+init_sigma_B = 15.0       # W m-2 sr-1, space x long-term component
 init_ell_space_A_km = 2000.0
 init_ell_season_days = 60.0
 init_ell_space_B_km = 4000.0
 init_ell_time_years = 1.0
-init_sigma0 = 15.0        # W m-2, irreducible noise
-init_sigma1 = 30.0        # W m-2, per-overpass sampling noise
+init_sigma0 = 15.0        # W m-2 sr-1, irreducible noise
+init_sigma1 = 30.0        # W m-2 sr-1, per-overpass sampling noise
 
 [cv]
 # Block sizes and buffers are set from the EDA residual correlation scales (results/eda/summary.md).

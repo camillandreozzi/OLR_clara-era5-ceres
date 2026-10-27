@@ -2,7 +2,7 @@
 
 One row per (year, month, cell) where CLARA has at least one usable sample:
     year, month, lat, lon   cell centre (deg) on the res x res deg grid
-    clara                   mean of the CLARA Earth-viewing samples in the cell that month (W m-2)
+    clara                   mean of the CLARA Earth-viewing samples in the cell that month (radiance, W m-2 sr-1)
     clara_count             number of CLARA samples behind that mean
     ceres                   CERES EBAF monthly mean all-sky OLR (W m-2)
     era5                    ERA5 monthly mean OLR, -ttr/86400, area-averaged to the cell (W m-2)

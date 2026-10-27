@@ -1,8 +1,8 @@
 """Phase 3: the harmonised CLARA - ERA5 dataset on the model grid (grid.res_deg cells x months).
 
 Steps (each documented in results/preprocessing/decisions.md):
-  1. Units and sign. CLARA OLR is used as stored (W m-2, positive upward). ERA5 ttr (J m-2, negative
-     upward) becomes OLR = -ttr / 3600 per hourly accumulation (era5_night.py). Physical units only;
+  1. Units and sign. CLARA OLR is a radiance, used as stored (W m-2 sr-1, positive upward). ERA5 ttr (J m-2,
+     negative upward) becomes OLR = -ttr / 3600 per hourly accumulation (era5_night.py). Physical units only;
      statistical standardisation happens inside each CV fold on training rows (gp.GP.fit).
   2. Time. CLARA Julian dates (UTC) are binned by calendar month; ERA5 monthly products are stamped at
      the first of the month. The model time of a cell-month is the middle of the month (the estimand is
@@ -17,7 +17,7 @@ Steps (each documented in results/preprocessing/decisions.md):
      and month. Cells and months without CLARA stay missing in the observation table; the prediction grid
      holds every cell-month with its clara_observed flag, so modelled and observed values never mix.
   6. Regime. post_gap = 1 from time.gap_start on, 0 before (post_gap_indicator): the predictor of the
-     ~40 W m-2 calibration step across the CLARA gap. The gap months, never observed, count as post-gap.
+     calibration step across the CLARA gap (CLARA / ERA5 rises by ~23 %). The gap months, never observed, count as post-gap.
 
 Output:
     data/processed/harmonised_<res>deg_monthly.parquet     observations (one row per observed cell-month)
@@ -208,7 +208,7 @@ def validation_checks(obs, grid, cfg):
         ("prediction-grid months with post_gap = 1", grid.time[grid.post_gap == 1].nunique(),
          f"{len(pd.period_range(cfg['time']['gap_start'], cfg['time']['last_month'], freq='M'))} "
          f"(every month from {cfg['time']['gap_start']})"),
-        ("CLARA cell-month means outside [olr_min, 400] W m-2", int(((obs.clara < 50) | (obs.clara > 400)).sum()), "0"),
+        ("CLARA cell-month means outside [olr_min, 400] W m-2 sr-1", int(((obs.clara < 50) | (obs.clara > 400)).sum()), "0"),
     ]
     return pd.DataFrame(checks, columns=["check", "value", "expected"])
 
@@ -219,16 +219,16 @@ Configuration: `{cfg_path}`, grid {res} deg, QC night SZA > {sza:g} deg and VZA 
 
 | # | Decision | Why | Effect on resolution / information |
 |---|---|---|---|
-| 1 | CLARA OLR used as stored, W m-2 positive upward; ERA5 OLR = -ttr/3600 per hourly accumulation (monthly by hour of day) | ERA5 ttr is a J m-2 accumulation, negative upward; validated: the 24 h mean of the hourly product equals the monthly product to {maxdiff:.4f} W m-2 | none |
+| 1 | CLARA OLR (a radiance) used as stored, W m-2 sr-1 positive upward; ERA5 OLR = -ttr/3600 per hourly accumulation (monthly by hour of day) | ERA5 ttr is a J m-2 accumulation, negative upward; validated: the 24 h mean of the hourly product equals the monthly product to {maxdiff:.4f} W m-2 | none |
 | 2 | Physical-unit harmonisation only; y and ERA5 are standardised inside each CV fold with training rows | prevents leakage of test-fold statistics | none |
-| 3 | QC: read_in earth_view & in_range [{olr_min:g} (raised {olr_from}), {olr_max:g}] W m-2, footprint SZA > {sza:g} deg, VZA <= {vza:g} deg | CLARA measures OLR on the night side only; daylit footprints read tens of W m-2 higher; VZA > 60 deg shows strong limb darkening (results/eda/physics_*.png) | keeps {n_qc:,} of {n_usable:,} usable samples ({frac_qc:.0%}) |
+| 3 | QC: read_in earth_view & in_range [{olr_min:g} (raised {olr_from}), {olr_max:g}] W m-2 sr-1, footprint SZA > {sza:g} deg, VZA <= {vza:g} deg | CLARA measures OLR on the night side only; relative to ERA5, daylit footprints read 40-54 % higher; VZA > 60 deg shows strong limb darkening (results/eda/physics_*.png) | keeps {n_qc:,} of {n_usable:,} usable samples ({frac_qc:.0%}) |
 | 4 | Overpasses: consecutive QC'd samples separated by <= {gap:g} min belong to one overpass; n_overpasses per cell-month enters the noise model | samples along one track are strongly correlated (lag-1 r ~ 0.9), so the sampling error scales with overpasses, not samples | none |
 | 5 | Monthly resolution, {res} deg cells (grid.res_deg; user and supervisor choice), model time = middle of the month | ERA5 night-time product is monthly; a cell-month mean is the CLARA estimand | CLARA values are only binned by footprint centre, never interpolated or copied to another cell. {res_note} "day" is not used as a predictor |
 | 6 | ERA5 night-time mean: hourly monthly means weighted by the fraction of the month's days on which each hour is night (SZA > {sza:g} deg at the 1 deg cell centre); polar-day cells (no night hour in the month) use the mean of the {n_dark} darkest hours instead and are flagged night_fallback | matches what CLARA can observe; a 24 h mean mixes in daytime OLR; the fallback gives the prediction grid every lat-lon cell (user requirement) | the fallback value is a different quantity (darkest hours of a sunlit month) and CLARA never observes those cells: predictions there are extrapolation and are hatched on maps |
 | 7 | ERA5 0.25 deg -> 1 deg trapezoid area means{coarsen_note} (cos-lat weights) | conservative area averaging, not point interpolation | ERA5 effective resolution degraded to the model grid; no new information |
 | 8 | ERA5 spherical-cap smoothing at R in {radii} km kept as candidate predictors; R is chosen per CV fold on training rows | CLARA sees a wide footprint (unknown FOV); matching effective resolutions without using test data | smoothing uses ERA5 only; it never fills NaN cells |
 | 9 | Observation table holds only cell-months with >= 1 QC'd CLARA sample; the prediction grid holds every lat-lon cell of every month and flags clara_observed and night_fallback | genuine missingness is kept explicit; the grid has no gaps | none |
-| 10 | post_gap (1 from {gap_start} on, 0 before) enters every model's mean function as beta2 (gp.gap_step); the period labels pre-gap / post-gap are kept for reporting | CLARA - ERA5 changes by ~40 W m-2 across the {gap_start} -> {gap_end} data gap (calibration step, EDA); the user chose a step predictor. The gap months are assigned to the post-gap regime by convention | CLARA never observes the gap months, so predictions there are extrapolation and the step is placed at the start of the gap |
+| 10 | post_gap (1 from {gap_start} on, 0 before) enters every model's mean function as beta2 (gp.gap_step); the period labels pre-gap / post-gap are kept for reporting | CLARA / ERA5 rises by ~23 % across the {gap_start} -> {gap_end} data gap (calibration step, EDA); the user chose a step predictor. The gap months are assigned to the post-gap regime by convention | CLARA never observes the gap months, so predictions there are extrapolation and the step is placed at the start of the gap |
 | 11 | CERES EBAF is joined only into the EDA reference table, never into the model inputs | user decision: CERES is an EDA reference | none |
 
 ## Attrition

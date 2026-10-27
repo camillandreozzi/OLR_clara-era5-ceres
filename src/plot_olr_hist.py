@@ -1,8 +1,8 @@
-"""Histograms of the Earth-viewing CLARA OLR samples within [0, 500] W m-2, overall and per year, and
+"""Histograms of the Earth-viewing CLARA OLR samples within [0, 500] W m-2 sr-1, overall and per year, and
 the same compared with ERA5 and CERES.
 
 Only Earth-viewing samples (read_in.read_clara, earth_view) are kept, and of those only negative values
-and values above 500 W m-2 are removed; the [OLR_MIN, OLR_MAX] in_range filter is not applied.
+and values above 500 W m-2 sr-1 are removed; the [OLR_MIN, OLR_MAX] in_range filter is not applied.
 In the comparison, ERA5 and CERES are the monthly mean values of all 1 deg cells (ERA5 area-averaged
 onto the CERES grid), weighted by cos(lat); all three are normalised to a probability density.
 The raw OLR is quantised in steps of OLR_STEP, so each bin spans a whole number of steps, centred on
@@ -10,7 +10,8 @@ them; otherwise neighbouring bins would alternately hold more and fewer possible
 
 The comparison is also drawn standardised: each dataset as z = (OLR - mean) / std, with its own
 (weighted) mean and std over the values in that figure, so the shapes can be compared independently of
-units, offset and scale (CLARA's .save files carry no unit). The legend gives each mean +- std in W m-2.
+units, offset and scale: CLARA is a radiance (W m-2 sr-1; the .save files carry no unit), ERA5 and CERES are
+fluxes (W m-2). The legend gives each mean +- std in its own unit.
 
 Output:
     results/olr_hist/olr_hist_all.png
@@ -33,9 +34,9 @@ import numpy as np
 import read_in
 from plot_raw_means import RESULTS_DIR
 
-OLR_LO, OLR_HI = 0.0, 500.0  # W m-2, samples kept
-OLR_STEP = 0.65336  # W m-2, quantisation of the raw OLR (values are whole multiples of it)
-STEPS_PER_BIN = 8  # bin width = 8 steps ~ 5.2 W m-2
+OLR_LO, OLR_HI = 0.0, 500.0  # W m-2 sr-1, samples kept
+OLR_STEP = 0.65336  # W m-2 sr-1, quantisation of the raw OLR (values are whole multiples of it)
+STEPS_PER_BIN = 8  # bin width = 8 steps ~ 5.2 W m-2 sr-1
 BINS = (np.arange(0, OLR_HI / OLR_STEP + STEPS_PER_BIN, STEPS_PER_BIN) - 0.5) * OLR_STEP
 Z_BINS = np.linspace(-5, 5, 101)  # standardised OLR, 0.1 std per bin
 
@@ -44,7 +45,7 @@ def plot(olr, title, path):
     fig, ax = plt.subplots(figsize=(7, 4.5), layout="constrained")
     ax.hist(olr, bins=BINS)
     ax.set_title(title)
-    ax.set_xlabel("OLR (W m$^{-2}$)")
+    ax.set_xlabel("CLARA OLR radiance (W m$^{-2}$ sr$^{-1}$)")
     ax.set_ylabel("samples")
     fig.savefig(path, dpi=130)
     plt.close(fig)
@@ -60,13 +61,15 @@ def standardise(values, weights=None):
 def plot_compare(series, title, path, normalised=False):
     """series: {label: (values, weights or None)}, drawn as density step histograms on one axis.
 
-    normalised=True standardises each series (see standardise) and plots z instead of W m-2.
+    normalised=True standardises each series (see standardise) and plots z instead of physical units. CLARA
+    (labels starting with "CLARA") is a radiance in W m-2 sr-1, the others are fluxes in W m-2.
     """
     fig, ax = plt.subplots(figsize=(9, 5), layout="constrained")
     for label, (values, weights) in series.items():
         if normalised:
             values, mean, std = standardise(values, weights)
-            label = f"{label}: {mean:.1f} ± {std:.1f} W m$^{{-2}}$"
+            unit = "W m$^{-2}$ sr$^{-1}$" if label.startswith("CLARA") else "W m$^{-2}$"
+            label = f"{label}: {mean:.1f} ± {std:.1f} {unit}"
         ax.hist(values, bins=Z_BINS if normalised else BINS, weights=weights, density=True,
                 histtype="step", lw=1.5, label=label)
     ax.set_title(title)
@@ -74,8 +77,8 @@ def plot_compare(series, title, path, normalised=False):
         ax.set_xlabel("standardised OLR, (OLR − mean) / std")
         ax.set_ylabel("probability density (per std)")
     else:
-        ax.set_xlabel("OLR (W m$^{-2}$)")
-        ax.set_ylabel("probability density (per W m$^{-2}$)")
+        ax.set_xlabel("OLR (CLARA radiance in W m$^{-2}$ sr$^{-1}$; ERA5 and CERES flux in W m$^{-2}$)")
+        ax.set_ylabel("probability density (per unit)")
     long = max(len(label) for label in ax.get_legend_handles_labels()[1]) > 40  # stack long labels
     fig.legend(loc="outside lower center", ncol=1 if long else len(series), frameon=False)
     fig.savefig(path, dpi=130)

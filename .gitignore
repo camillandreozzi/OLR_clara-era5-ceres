@@ -28,3 +28,6 @@ results/*_1deg/
 
 # Conference overview slide (local only)
 slide/
+
+# Manuscript draft (local only)
+docs/paper/

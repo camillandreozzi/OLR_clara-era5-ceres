@@ -44,13 +44,13 @@ kernel and ERA5 each add: the GP without ERA5, and regression with and without E
 refitted on all data and mapped with its uncertainty.
 
 <p align="center">
-  <img src="results/eda/temporal_global.png" alt="Monthly mean OLR of CLARA, ERA5 and CERES over the cells CLARA observed, and the CLARA minus ERA5 bias" width="100%">
+  <img src="results/eda/temporal_global.png" alt="Monthly mean OLR of ERA5 and CERES (flux) and of CLARA (radiance) over the cells CLARA observed, and the CLARA / ERA5 ratio" width="100%">
 </p>
 
-*Why a statistical model is needed: CLARA (blue) reads about 77 W m⁻² below night-time ERA5 before the
-2021-09 → 2022-05 data gap and about 36 W m⁻² below after it. ERA5 and CERES differ by only 2.4 W m⁻² on
-average. Within each period, CLARA follows the month-to-month fluctuations of ERA5
-(`results/eda/summary.md`).*
+*Why a statistical model is needed: CLARA measures a radiance (W m⁻² sr⁻¹), ERA5 and CERES a flux (W m⁻²),
+so the two are compared through their ratio. CLARA / ERA5 night is about 0.69 sr⁻¹ before the 2021-09 → 2022-05
+data gap and about 0.85 sr⁻¹ after it, a rise of 23 %. ERA5 and CERES differ by only 2.4 W m⁻² on average.
+Within each period, CLARA follows the month-to-month fluctuations of ERA5 (`results/eda/summary.md`).*
 
 ## Pipeline overview
 
@@ -64,7 +64,8 @@ The pipeline runs in six stages. Folders in the figure are files on disk. Every 
 
 1. **Read & quality-control**
    - **a.** `read_in.py` unpacks the CLARA archives, geolocates each footprint, and returns every product
-     as OLR in W m⁻² (positive upward) on common lat-lon conventions.
+     as OLR, positive upward, on common lat-lon conventions: CLARA as the stored radiance (W m⁻² sr⁻¹; the
+     files carry no unit, the instrument team confirmed it), ERA5 and CERES as fluxes (W m⁻²).
    - **b.** `samples.py` adds the solar zenith angle (SZA) and local solar time at each footprint, the QC
      flags (night side SZA > 100°, viewing zenith angle VZA ≤ 60°) and overpass ids.
    - **c.** `inventory.py` lists every input file, its coverage and the samples left at each QC stage.
@@ -315,7 +316,8 @@ Then archive or delete `results/model/` and `logs/`. Make the folds again locall
 | `results/model/<winner>/global_mean_monthly.*` | Area-weighted global mean with variance from the full posterior covariance |
 | `results/report/report.md` | Final report |
 
-The prediction NetCDF has dims `(time, lat, lon)` on the 5° grid. All values are in W m⁻² unless noted:
+The prediction NetCDF has dims `(time, lat, lon)` on the 5° grid. All CLARA quantities (predictions, SDs,
+residuals, mean function) are in CLARA's radiance units, W m⁻² sr⁻¹; `era5_night` is a flux in W m⁻²:
 
 | Variable | Description |
 |---|---|
@@ -397,11 +399,14 @@ types with equal weight. Calibration is checked with interval coverage and PIT h
 
 ## Data caveats
 
-- **Night side only.** Against hour-matched ERA5, daylit footprints read 69–84 W m⁻² higher than night-side
+- **Units.** CLARA's OLR is a radiance (W m⁻² sr⁻¹), ERA5 and CERES are fluxes (W m⁻²). CLARA is never
+  subtracted from them: comparisons use correlations, ratios and values relative to each series' own mean, and
+  the regression slope β₁ (sr⁻¹) converts ERA5 into CLARA's units inside the model.
+- **Night side only.** Relative to hour-matched ERA5, daylit footprints read 40–54 % higher than night-side
   ones (shortwave contamination), so only footprints with SZA > 100° are used.
 - **Not angle-corrected.** CLARA falls steeply beyond VZA ≈ 60°, and a residual geometry effect remains
   within the kept range. VZA is deliberately not a predictor, so this effect becomes noise.
-- **Calibration step.** The CLARA − ERA5 bias changes by about 40 W m⁻² across the 2021-09 → 2022-05 data
+- **Calibration step.** CLARA's level relative to ERA5 rises by about 23 % across the 2021-09 → 2022-05 data
   gap. The models include it as a single global offset β₂ from 2021-09 on. When in the gap it happened is
   unknown, so the maps of the gap months (assigned to the post-gap level) are extrapolation, and their
   uncertainty does not include the timing of the step.

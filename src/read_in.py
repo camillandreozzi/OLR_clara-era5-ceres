@@ -20,7 +20,8 @@ Data layout (relative to the repo root):
     data/CERES/CERES_EBAF*.nc              CERES EBAF Ed4.2.1 monthly TOA all-sky LW flux (toa_lw_all_mon), 1 deg.
     data/ERA5/*.nc                         ERA5 top net thermal radiation (ttr), downloaded by retrieve_era5.py.
 
-All gridded products are returned with OLR as a positive upward flux in W m-2, dims (time, lat, lon),
+CLARA's OLR is a radiance in W m-2 sr-1 (the .save files carry no unit; confirmed by the instrument team) and is
+used as stored. All gridded products are returned with OLR as a positive upward flux in W m-2, dims (time, lat, lon),
 lat ascending and lon in [-180, 180). Monthly products use the first of the month as their time stamp.
 
 Usage:
@@ -51,7 +52,7 @@ EXTRACT_DIR = CLARA_DIR / "extracted"
 
 JULIAN_UNIX_EPOCH = 2440587.5  # Julian date of 1970-01-01T00:00Z
 
-# Plausible range for Earth-viewing OLR in W m-2; samples outside it get in_range=False.
+# Plausible range for Earth-viewing CLARA OLR in W m-2 sr-1; samples outside it get in_range=False.
 # The lower limit is OLR_MIN, raised from the years in OLR_MIN_FROM on ({first year: limit}).
 OLR_MIN = 50.0
 OLR_MIN_FROM = {2024: 75.0, 2025: 90.0}
@@ -260,7 +261,7 @@ def geolocate(olr, geo):
 
 
 def olr_min(time):
-    """Lower in_range limit (W m-2) for each sample time: OLR_MIN, raised per OLR_MIN_FROM."""
+    """Lower in_range limit (W m-2 sr-1) for each sample time: OLR_MIN, raised per OLR_MIN_FROM."""
     year = time.dt.year.to_numpy()
     lo = np.full(year.shape, OLR_MIN)
     for first, limit in sorted(OLR_MIN_FROM.items()):
@@ -396,7 +397,7 @@ def coarsen(ds, res):
 def grid_clara(df, res, freq="M"):
     """Bin CLARA footprint samples onto a res deg grid per period ("M" monthly, "Y" yearly).
 
-    Returns a Dataset with 'olr' (mean of all samples in the cell, W m-2) and 'count'.
+    Returns a Dataset with 'olr' (mean of all samples in the cell, W m-2 sr-1) and 'count'.
     """
     lat_c, lon_c = grid_centres(res)
     nlat, nlon = len(lat_c), len(lon_c)
@@ -425,7 +426,7 @@ def _summarise_clara(df):
     good = df[df.earth_view & df.in_range]
     print(f"CLARA: {len(df):,} samples {df.time.min():%Y-%m-%d} -> {df.time.max():%Y-%m-%d}; "
           f"{df.earth_view.sum():,} Earth-viewing, {len(good):,} Earth-viewing within "
-          f"[{OLR_MIN:g} ({', '.join(f'{v:g} from {y}' for y, v in sorted(OLR_MIN_FROM.items()))}), {OLR_MAX:g}] W m-2 "
+          f"[{OLR_MIN:g} ({', '.join(f'{v:g} from {y}' for y, v in sorted(OLR_MIN_FROM.items()))}), {OLR_MAX:g}] W m-2 sr-1 "
           f"(mean {good.olr.mean():.1f})")
     per_month = good.groupby(good.time.dt.to_period("M")).olr.agg(["size", "mean"])
     all_months = pd.period_range(df.time.min(), df.time.max(), freq="M")

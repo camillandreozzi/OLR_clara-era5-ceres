@@ -1,6 +1,7 @@
 """Side-by-side maps of the raw mean OLR from CLARA, CERES EBAF and ERA5, per month and per year.
 
-All three are put on a common res x res deg grid in W m-2, positive upward:
+All three are put on a common res x res deg grid, positive upward. CLARA is a radiance (W m-2 sr-1) and is drawn
+on its own colour scale; CERES and ERA5 are fluxes (W m-2) and share one:
     CLARA  Earth-viewing samples within [OLR_MIN, OLR_MAX] (OLR_MIN raised per OLR_MIN_FROM) (read_in.read_clara), binned by footprint
            location; each cell is the mean of all samples that fell in it during the period.
     CERES  toa_lw_all_mon is already a monthly mean flux in W m-2; only area-averaged to the grid.
@@ -43,7 +44,8 @@ except ImportError:  # coastlines are drawn only when cartopy is installed
 
 RESULTS_DIR = read_in.ROOT / "results"
 
-VMIN, VMAX = 100, 320  # W m-2, fixed so every figure shares one colour scale
+VMIN, VMAX = 100, 320  # W m-2, fixed so every figure shares one colour scale for the fluxes
+CLARA_VMIN, CLARA_VMAX = 60, 300  # W m-2 sr-1, CLARA's own fixed colour scale (a radiance)
 # Single-hue sequential ramp (light = low OLR, dark = high OLR).
 CMAP = LinearSegmentedColormap.from_list("olr_blue", [
     "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"])
@@ -97,7 +99,7 @@ def _panel_title(name, sel, clara_mask, yearly):
     if name == "CLARA":
         coverage = float((sel["count"] > 0).mean())
         return (f"{name}  ({int(sel['count'].sum()):,} samples, {coverage:.0%} of cells)\n"
-                f"mean {area_mean(sel.olr):.1f} W m$^{{-2}}$")
+                f"mean {area_mean(sel.olr):.1f} W m$^{{-2}}$ sr$^{{-1}}$")
     line = f"mean {area_mean(sel.olr):.1f}"
     if clara_mask is not None and bool(clara_mask.any()) and bool((sel.olr.notnull() & ~clara_mask).any()):
         line += f"  |  on CLARA cells {area_mean(sel.olr, clara_mask):.1f}"
@@ -117,12 +119,13 @@ def plot_period(datasets, t, label, path, yearly, title="Raw mean OLR"):
     res = float(ref.lat[1] - ref.lat[0])
     lat_edges, lon_edges = read_in.grid_edges(round(res))
 
-    mesh = None
+    meshes = {}
     for ax, (name, sel) in zip(axes, sels.items()):
         values = sel.olr.values if sel is not None else np.full((len(lat_edges) - 1, len(lon_edges) - 1), np.nan)
         extra = {"transform": ccrs.PlateCarree()} if ccrs else {}
-        mesh = ax.pcolormesh(lon_edges, lat_edges, np.ma.masked_invalid(values),
-                             cmap=CMAP, vmin=VMIN, vmax=VMAX, **extra)
+        lo, hi = (CLARA_VMIN, CLARA_VMAX) if name == "CLARA" else (VMIN, VMAX)
+        meshes[name] = ax.pcolormesh(lon_edges, lat_edges, np.ma.masked_invalid(values),
+                                     cmap=CMAP, vmin=lo, vmax=hi, **extra)
         if ccrs:
             ax.coastlines(linewidth=0.5, color=INK)
             ax.set_global()
@@ -137,10 +140,15 @@ def plot_period(datasets, t, label, path, yearly, title="Raw mean OLR"):
                 spine.set_color(MUTED)
         ax.set_title(_panel_title(name, sel, clara_mask, yearly), fontsize=10, color=INK, loc="left")
 
-    cbar = fig.colorbar(mesh, ax=axes, orientation="horizontal", shrink=0.4, aspect=40, extend="both", pad=0.04)
-    cbar.set_label("OLR (W m$^{-2}$), grey = no data", color=INK, fontsize=9)
-    cbar.ax.tick_params(colors=MUTED, labelsize=8)
-    cbar.outline.set_visible(False)
+    flux_axes = [ax for ax, name in zip(axes, sels) if name != "CLARA"]
+    clara_ax = [ax for ax, name in zip(axes, sels) if name == "CLARA"]
+    for mesh, cax, unit_label, shrink in (
+            (meshes["CLARA"], clara_ax, "CLARA OLR radiance (W m$^{-2}$ sr$^{-1}$)", 0.8),
+            (meshes["ERA5"], flux_axes, "OLR flux (W m$^{-2}$)", 0.5)):
+        cbar = fig.colorbar(mesh, ax=cax, orientation="horizontal", shrink=shrink, aspect=30, extend="both", pad=0.04)
+        cbar.set_label(f"{unit_label}, grey = no data", color=INK, fontsize=9)
+        cbar.ax.tick_params(colors=MUTED, labelsize=8)
+        cbar.outline.set_visible(False)
     fig.suptitle(f"{title}, {label}", color=INK, fontsize=13, x=0.01, ha="left")
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=130, facecolor="white")

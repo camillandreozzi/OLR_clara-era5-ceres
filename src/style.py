@@ -31,6 +31,9 @@ KERNEL_LABELS = {"exponential": "Exponential", "gaussian": "Gaussian (SE)", "mat
 # models are neutral
 BASELINE_COLORS = {"linear": INK, "linear_noera5": MUTED}
 BASELINE_LABELS = {"linear": "Regression on ERA5 (no GP)", "linear_noera5": "Pre/post-gap constant (no GP, no ERA5)"}
+# Units: CLARA's OLR is a radiance, ERA5 and CERES are fluxes. Never subtract one from the other; compare them
+# through correlations, ratios (sr-1) or values relative to each series' own mean.
+CLARA_UNIT, FLUX_UNIT, RATIO_UNIT = "W m$^{-2}$ sr$^{-1}$", "W m$^{-2}$", "sr$^{-1}$"
 
 
 def model_label(model):

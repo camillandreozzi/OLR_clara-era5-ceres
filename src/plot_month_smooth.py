@@ -8,8 +8,9 @@ histograms cover the same cell-months.
 Maps        side by side CLARA | CERES EBAF | ERA5, one figure per month
 Histograms  as in plot_olr_hist.py (era5_ceres_clara): density step histograms of the cell values,
             overall and per year. All three are weighted by cos(lat), as they are now cell means.
-            Drawn in W m-2 and standardised (z = (OLR - mean) / std per dataset and figure, so shapes
-            compare independently of units, offset and scale).
+            Drawn in physical units (CLARA radiance in W m-2 sr-1, CERES and ERA5 flux in W m-2) and
+            standardised (z = (OLR - mean) / std per dataset and figure, so shapes compare independently of
+            units, offset and scale).
 
 Output, <res> in the file names:
     results/month_smooth_comparison/<yyyy>/comparison_<yyyy>-<mm>_<res>deg.png
