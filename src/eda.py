@@ -16,7 +16,8 @@ Sections and outputs (results/eda/):
               temporal_seasonal.png, temporal_acf.png/.csv, temporal_daily.png/.csv
   joint       agreement statistics overall and by period, latitude band, season and year; scatter:
               joint_stats.csv, joint_scatter.png
-  summary.md  the key numbers, what they imply for combining the datasets, and the EDA-derived CV settings
+  summary.md  the key numbers, what they imply for combining the datasets, and the EDA-derived CV settings;
+              summary_numbers.csv holds the same numbers (name, value, description) for report.py's numbers.tex
 
 Units: CLARA's OLR is a radiance (W m-2 sr-1), ERA5 and CERES are fluxes (W m-2). CLARA is compared with them
 through correlations, ratios (sr-1) and values relative to each series' own mean, never through differences;
@@ -39,15 +40,16 @@ import harmonise
 import read_in
 import samples
 from correlation import agreement
-from style import (CLARA_UNIT, DATASET_COLORS, FLUX_UNIT, INK, MUTED, OLR_CMAP, RATIO_UNIT, SERIES, colorbar,
-                   draw_field, map_axes, plt, save, style_axes, title)
+from style import (CLARA_UNIT, DATASET_COLORS, FLUX_UNIT, INK, MUTED, OLR_CMAP, PERIOD_COLORS, RATIO_UNIT, SERIES,
+                   colorbar, draw_field, map_axes, plt, save, style_axes, title)
 
 OUT = config.EDA_DIR
 CFG = config.load()
 RES = CFG["grid"]["res_deg"]
 GAP = (pd.Timestamp(CFG["time"]["gap_start"]), pd.Timestamp(CFG["time"]["gap_end"]) + pd.offsets.MonthEnd(0))
 PERIODS = ("pre-gap", "post-gap")
-PERIOD_COLORS = {"pre-gap": SERIES[0], "post-gap": SERIES[1]}
+PHYSICS_BIN_DEG = 5   # deg, width of the solar and viewing zenith angle bins (physics_*.png, physics_bins.csv)
+MIN_BIN_SAMPLES = 30  # a bin with fewer samples is left out
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +83,7 @@ def binned(x, y, edges, groups):
         for k in range(len(edges) - 1):
             v = y[m][idx == k]
             v = v[np.isfinite(v)]
-            if len(v) >= 30:
+            if len(v) >= MIN_BIN_SAMPLES:
                 rows.append({"group": g, "lo": edges[k], "hi": edges[k + 1], "centre": (edges[k] + edges[k + 1]) / 2,
                              "n": len(v), "mean": v.mean(), "median": np.median(v), "sd": v.std()})
     return pd.DataFrame(rows)
@@ -94,11 +96,12 @@ def binned(x, y, edges, groups):
 def physics(m):
     usable = m[m.period != "gap"]
     r_hour = (usable.olr / usable.era5_hour).to_numpy()
-    sza = binned(usable.sza.to_numpy(), r_hour, np.arange(40, 181, 5), usable.period.to_numpy())
-    raw_sza = binned(usable.sza.to_numpy(), usable.olr.to_numpy(), np.arange(40, 181, 5), usable.period.to_numpy())
+    sza_edges, vza_edges = np.arange(40, 181, PHYSICS_BIN_DEG), np.arange(0, 91, PHYSICS_BIN_DEG)
+    sza = binned(usable.sza.to_numpy(), r_hour, sza_edges, usable.period.to_numpy())
+    raw_sza = binned(usable.sza.to_numpy(), usable.olr.to_numpy(), sza_edges, usable.period.to_numpy())
     nt = usable[usable.night]
-    vza = binned(nt.vza.to_numpy(), (nt.olr / nt.era5_night).to_numpy(), np.arange(0, 91, 5), nt.period.to_numpy())
-    raw_vza = binned(nt.vza.to_numpy(), nt.olr.to_numpy(), np.arange(0, 91, 5), nt.period.to_numpy())
+    vza = binned(nt.vza.to_numpy(), (nt.olr / nt.era5_night).to_numpy(), vza_edges, nt.period.to_numpy())
+    raw_vza = binned(nt.vza.to_numpy(), nt.olr.to_numpy(), vza_edges, nt.period.to_numpy())
     table = pd.concat([sza.assign(x="sza", y="clara_over_era5_hour"), raw_sza.assign(x="sza", y="clara"),
                        vza.assign(x="vza (night)", y="clara_over_era5_night"), raw_vza.assign(x="vza (night)", y="clara")])
     table.to_csv(OUT / "physics_bins.csv", index=False, float_format="%.4f")
@@ -119,7 +122,7 @@ def physics(m):
             ax.set_ylabel(lab, color=INK)
             style_axes(ax)
         axes[0].legend(frameon=False, fontsize=9)
-        title(axes[0], "(a) Raw CLARA, binned means (≥ 30 samples per bin)")
+        title(axes[0], f"(a) Raw CLARA, binned means (≥ {MIN_BIN_SAMPLES} samples per bin)")
         title(axes[1], "(b) Ratio to ERA5 (removes the geographic pattern)")
         fig.suptitle({"physics_sza": "CLARA against footprint solar zenith angle (Earth-viewing, in-range samples)",
                       "physics_vza": "CLARA against viewing zenith angle (night-side samples)"}[name],
@@ -133,6 +136,7 @@ def physics(m):
         "daylit_fraction": (~usable.night).groupby(month).mean(),
         "lst_median_qc": q.groupby(q.time.dt.to_period("M").dt.to_timestamp()).lst.median(),
         "altitude_km": usable.groupby(month).sat_alt.mean() / 1000})
+    geo.rename_axis("month").to_csv(OUT / "physics_geometry.csv", float_format="%.4f")
     fig, axes = plt.subplots(4, 1, figsize=(11, 8.5), sharex=True, layout="constrained")
     for ax, (col, lab) in zip(axes, [("altitude_km", "satellite altitude (km)"),
                                      ("vza_median_night", "median VZA, night (deg)"),
@@ -231,8 +235,8 @@ def resolution(m, obs, s):
     axes[0].set(xlabel="along-track separation (km)", ylabel="correlation")
     axes[0].legend(frameon=False, fontsize=9)
     title(axes[0], "(a) Along-track autocorrelation of QC'd samples")
-    for p, color in zip(("all",) + PERIODS, SERIES):
-        g = smooth[smooth.period == p]
+    for p in ("all",) + PERIODS:
+        g, color = smooth[smooth.period == p], PERIOD_COLORS[p]
         axes[1].plot(g.radius_km, g.r, color=color, lw=2, marker="o", ms=5, label=f"{p}: pooled r")
         axes[1].plot(g.radius_km, g.r_anomaly_within_band_month, color=color, lw=1.5, ls="--", marker="s", ms=4,
                      label=f"{p}: anomaly r")
@@ -318,10 +322,31 @@ def efold(x, r):
     return x[k - 1] + (np.exp(-1) - r[k - 1]) * (x[k] - x[k - 1]) / (r[k] - r[k - 1])
 
 
-def spatial(obs, ref):
-    o = obs.merge(ref[["obs_id", "ceres"]], on="obs_id", how="left")
-    means = o.groupby(["lat", "lon"])[["clara", "era5_night_r0", "era5_24h", "ceres"]].mean().reset_index()
+def with_ceres(obs, ref):
+    """The observation table with the CERES value of each cell-month (EDA reference only)."""
+    return obs.merge(ref[["obs_id", "ceres"]], on="obs_id", how="left")
+
+
+def coverage(o):
+    """Observed months per cell, and observed cell-months per latitude band (rows) and month (columns)."""
     count = o.groupby(["lat", "lon"]).size().rename("months").reset_index()
+    hov = o.groupby([o.time, cv.lat_band(o.lat)]).size().unstack(fill_value=0)
+    hov = hov.reindex(pd.date_range(CFG["time"]["first_month"], CFG["time"]["last_month"], freq="MS"), fill_value=0)
+    return count, hov[[b for _, _, b in cv.LAT_BANDS if b in hov.columns]].T
+
+
+def zonal_relative(o):
+    """Zonal means over the observed cell-months, and each profile relative to its own area-weighted mean
+    (unitless, so radiance and flux compare)."""
+    zon = o.groupby("lat")[["clara", "era5_night_r0", "era5_24h", "ceres"]].mean()
+    wz = np.cos(np.radians(zon.index.to_numpy()))
+    return zon, zon.apply(lambda c: c / np.average(c[c.notna()], weights=wz[c.notna().to_numpy()]))
+
+
+def spatial(obs, ref):
+    o = with_ceres(obs, ref)
+    means = o.groupby(["lat", "lon"])[["clara", "era5_night_r0", "era5_24h", "ceres"]].mean().reset_index()
+    count, hov = coverage(o)
 
     fig = plt.figure(figsize=(15, 9), layout="constrained")
     panels = [("clara", "CLARA (QC'd, night side)", CLARA_UNIT), ("era5_night_r0", "ERA5 night-time", FLUX_UNIT),
@@ -360,23 +385,17 @@ def spatial(obs, ref):
     colorbar(fig, mesh, ax, "months with ≥ 1 QC'd sample", extend="neither", shrink=0.8)
     title(ax, f"(a) Observed months per cell (of {o.time.nunique()} months with data)")
     ax2 = fig.add_subplot(1, 2, 2)
-    hov = o.groupby([o.time, cv.lat_band(o.lat)]).size().unstack(fill_value=0)
-    hov = hov.reindex(pd.date_range(CFG["time"]["first_month"], CFG["time"]["last_month"], freq="MS"), fill_value=0)
-    cols = [b for _, _, b in cv.LAT_BANDS if b in hov.columns]
-    im = ax2.imshow(hov[cols].T.values, aspect="auto", cmap=OLR_CMAP, origin="lower",
-                    extent=[0, len(hov), -0.5, len(cols) - 0.5])
-    ax2.set_yticks(range(len(cols)), cols)
-    ticks = [k for k, t in enumerate(hov.index) if t.month == 1]
-    ax2.set_xticks(ticks, [hov.index[k].year for k in ticks])
+    im = ax2.imshow(hov.values, aspect="auto", cmap=OLR_CMAP, origin="lower",
+                    extent=[0, hov.shape[1], -0.5, len(hov) - 0.5])
+    ax2.set_yticks(range(len(hov)), hov.index)
+    ticks = [k for k, t in enumerate(hov.columns) if t.month == 1]
+    ax2.set_xticks(ticks, [hov.columns[k].year for k in ticks])
     colorbar(fig, im, ax2, "observed cell-months", extend="neither", shrink=0.8)
     title(ax2, "(b) Observed cell-months by latitude band and month")
     style_axes(ax2, grid=False)
     save(fig, OUT / "spatial_coverage.png")
 
-    # each zonal profile relative to its own area-weighted mean: unitless, so radiance and flux compare
-    zon = o.groupby("lat")[["clara", "era5_night_r0", "era5_24h", "ceres"]].mean()
-    wz = np.cos(np.radians(zon.index.to_numpy()))
-    zon_rel = zon.apply(lambda c: c / np.average(c[c.notna()], weights=wz[c.notna().to_numpy()]))
+    zon, zon_rel = zonal_relative(o)
     fig, ax = plt.subplots(figsize=(9, 4.6), layout="constrained")
     for col, lab, color, ls in (("clara", "CLARA", DATASET_COLORS["CLARA"], "-"),
                                 ("era5_night_r0", "ERA5 night", DATASET_COLORS["ERA5"], "-"),
@@ -398,8 +417,8 @@ def spatial(obs, ref):
     pd.DataFrame([{"period": p, "c": c, "range_km": length} for p, (c, length) in fits.items()]).to_csv(
         OUT / "spatial_correlogram_fit.csv", index=False, float_format="%.4f")
     fig, ax = plt.subplots(figsize=(9, 4.6), layout="constrained")
-    for p, color in zip(("all",) + PERIODS, SERIES):
-        g = cg[cg.period == p]
+    for p in ("all",) + PERIODS:
+        g, color = cg[cg.period == p], PERIOD_COLORS[p]
         c, length = fits[p]
         ax.plot(g.distance_km, g.correlation, color=color, lw=0, marker="o", ms=4,
                 label=f"{p}: fit {c:.2f}·exp(−d / {length:,.0f} km)")
@@ -613,6 +632,21 @@ def joint(obs, ref):
 # Summary
 # ---------------------------------------------------------------------------
 
+VZA_MID = (40, 55)  # deg, viewing angles at which the pre- and post-gap ratios are compared
+
+
+def steepest_drop(sza_ratio, lo=80, hi=120):
+    """Per period: (bin centre, next bin centre, drop) of the largest fall of the binned CLARA / ERA5 hour ratio
+    between adjacent SZA bins with centres in [lo, hi] deg."""
+    out = {}
+    for p in PERIODS:
+        g = sza_ratio[(sza_ratio.group == p) & sza_ratio.centre.between(lo, hi)].sort_values("centre")
+        d = -np.diff(g["mean"].to_numpy())
+        k = int(np.argmax(d))
+        out[p] = (float(g.centre.iloc[k]), float(g.centre.iloc[k + 1]), float(d[k]))
+    return out
+
+
 def summary(ph, rs, sp, tp, st, obs, m):
     def get(group, label, pair, col):
         r = st[(st.group == group) & (st.label == label) & (st.pair == pair)]
@@ -624,7 +658,7 @@ def summary(ph, rs, sp, tp, st, obs, m):
                     / sza[(sza.group == p) & (sza.centre > sza_min)]["mean"].mean() - 1) for p in PERIODS}
     q = m[m.qc]
     twilight = float(((q.sza > sza_min) & (q.sza <= sza_min + 5)).mean())
-    mid = vza[(vza.centre > 40) & (vza.centre < 55)].groupby("group")["mean"].mean()
+    mid = vza[(vza.centre > VZA_MID[0]) & (vza.centre < VZA_MID[1])].groupby("group")["mean"].mean()
     inside = {p: vza[(vza.group == p) & (vza.centre < vza_max)]["mean"] for p in PERIODS}
     spread = {p: (v.max() - v.min()) / v.mean() for p, v in inside.items()}
     ratio = {p: get("period", p, "CLARA vs ERA5 night", "ratio") for p in PERIODS}
@@ -644,6 +678,71 @@ def summary(ph, rs, sp, tp, st, obs, m):
     dacf = tp["dacf"]
     buffer_needed = int(np.ceil(l_all / 500) * 500)
     blocks_km = CFG["cv"]["spatial_block_lat"] * 111.2
+    steep = steepest_drop(sza)
+    geo = ph["geo"]
+    year = pd.DatetimeIndex(geo.index).year
+    usable_per_month = m[m.period != "gap"].groupby(m.time.dt.to_period("M").dt.to_timestamp()).size()
+    daylit_year = (geo.daylit_fraction * usable_per_month).groupby(year).sum() / usable_per_month.groupby(year).sum()
+    daylit_from = int(daylit_year[daylit_year > 0.5].index.min())
+    efold_km = efold(acf_res.distance_km, acf_res.r)
+    tl = tacf.set_index("lag_months").r
+    # every number the summary quotes, once, for report.py (numbers.tex); the text below uses the same values
+    nums = [
+        ("n_obs", len(obs), "observed cell-months"),
+        ("months_observed", obs.time.nunique(), "months with at least one observed cell-month"),
+        ("n_obs_pre", int((obs.period == "pre-gap").sum()), "observed cell-months, pre-gap"),
+        ("n_obs_post", int((obs.period == "post-gap").sum()), "observed cell-months, post-gap"),
+        ("daylit_excess_pre", day_jump["pre-gap"], "CLARA / hour-matched ERA5, daylit (SZA < 90) over night side, minus 1, pre-gap"),
+        ("daylit_excess_post", day_jump["post-gap"], "same, post-gap"),
+        ("sza_steep_lo_pre", steep["pre-gap"][0], "SZA bin centre (deg) before the largest drop between adjacent bins, pre-gap"),
+        ("sza_steep_hi_pre", steep["pre-gap"][1], "SZA bin centre (deg) after the largest drop, pre-gap"),
+        ("sza_steep_drop_pre", steep["pre-gap"][2], "that drop of CLARA / ERA5 hour, pre-gap"),
+        ("sza_steep_lo_post", steep["post-gap"][0], "SZA bin centre (deg) before the largest drop, post-gap"),
+        ("sza_steep_hi_post", steep["post-gap"][1], "SZA bin centre (deg) after the largest drop, post-gap"),
+        ("sza_steep_drop_post", steep["post-gap"][2], "that drop, post-gap"),
+        ("twilight_share", twilight, f"share of QC'd samples with SZA in ({sza_min:g}, {sza_min + 5:g}] deg"),
+        ("vza_spread_pre", spread["pre-gap"], f"(max - min) / mean of binned CLARA / ERA5 night for VZA < {vza_max:g}, pre-gap"),
+        ("vza_spread_post", spread["post-gap"], "same, post-gap"),
+        ("vza_mid_lo", VZA_MID[0], "lower VZA (deg) of the same-angle step comparison"),
+        ("vza_mid_hi", VZA_MID[1], "upper VZA (deg) of the same-angle step comparison"),
+        ("ratio_vza_mid_pre", mid.get("pre-gap", np.nan), "CLARA / ERA5 night at those VZA, pre-gap (sr-1)"),
+        ("ratio_vza_mid_post", mid.get("post-gap", np.nan), "same, post-gap (sr-1)"),
+        ("step_vza_mid", mid.get("post-gap", np.nan) / mid.get("pre-gap", np.nan) - 1, "relative step at those VZA"),
+        ("ratio_all", get("all", "all", "CLARA vs ERA5 night", "ratio"), "ratio of means CLARA / ERA5 night (sr-1)"),
+        ("slope_all", get("all", "all", "CLARA vs ERA5 night", "slope"), "weighted slope CLARA on ERA5 night (sr-1)"),
+        ("rel_slope", rel_slope, "slope relative to the means"),
+        ("ratio_pre", ratio["pre-gap"], "ratio of means, pre-gap (sr-1)"),
+        ("ratio_post", ratio["post-gap"], "ratio of means, post-gap (sr-1)"),
+        ("step_ratio", ratio["post-gap"] / ratio["pre-gap"] - 1, "relative rise of CLARA / ERA5 across the gap"),
+        ("zonal_r", zr, "correlation of the zonal-mean profiles of CLARA and ERA5 night"),
+        ("zonal_contrast", amp, "CLARA's equator-to-pole contrast relative to its mean, as a share of ERA5's"),
+        ("along_track_r", acf.r.iloc[0], "along-track autocorrelation of CLARA at the first lag"),
+        ("along_track_km", acf.distance_km.iloc[0], "distance (km) of that first lag"),
+        ("along_track_efold_km", efold_km, "distance (km) at which CLARA / ERA5 along-track correlation falls to 1/e"),
+        ("smooth_best_radius_km", best_r, "ERA5 cap radius (km) with the highest pooled r"),
+        ("smooth_best_r", sm_all.r.max(), "that r"),
+        ("smooth_r0", sm_all.r.loc[0], "pooled r without smoothing"),
+        ("corr_c", c_all, "fitted correlogram height c (structured share of the residual variance)"),
+        ("corr_range_km", l_all, "fitted correlogram range (km), all data"),
+        ("corr_range_pre_km", sp["fits"]["pre-gap"][1], "fitted range (km), pre-gap"),
+        ("corr_range_post_km", sp["fits"]["post-gap"][1], "fitted range (km), post-gap"),
+        ("nugget_share", 1 - c_all, "nugget share of the residual variance"),
+        ("acf_lag1", tl.get(1, np.nan), "fixed-cell residual autocorrelation at 1 month"),
+        ("acf_lag2", tl.get(2, np.nan), "same, 2 months"),
+        ("acf_lag6", tl.get(6, np.nan), "same, 6 months"),
+        ("acf_lag12", tl.get(12, np.nan), "same, 12 months"),
+        ("daily_lag1_r", dacf.r.iloc[0], "day-to-day lag-1 correlation"),
+        ("within_month_sd", tp["within_sd"], "within-cell-month SD of CLARA daily means (W m-2 sr-1)"),
+        ("within_month_sd_share", tp["within_sd"] / obs.clara.mean(), "that SD over the mean CLARA value"),
+        ("daylit_from_year", daylit_from, "first year in which most usable samples are daylit"),
+        ("daylit_share_min_from", daylit_year.loc[daylit_from:].min(), "lowest yearly daylit share from that year on"),
+        ("daylit_share_max_from", daylit_year.loc[daylit_from:].max(), "highest yearly daylit share from that year on"),
+        ("altitude_first_km", geo.altitude_km.dropna().iloc[0], "mean satellite altitude (km), first month"),
+        ("altitude_last_km", geo.altitude_km.dropna().iloc[-1], "mean satellite altitude (km), last month"),
+        ("cv_block_km", blocks_km, "side of a spatial CV block (km)"),
+        ("cv_buffer_needed_km", buffer_needed, "fitted range rounded up to 500 km"),
+    ]
+    pd.DataFrame(nums, columns=["name", "value", "description"]).to_csv(OUT / "summary_numbers.csv", index=False)
     lines = [
         "# EDA summary (generated by src/eda.py)",
         "",
@@ -659,14 +758,16 @@ def summary(ph, rs, sp, tp, st, obs, m):
         f"- **Only night-side samples are credible.** Relative to ERA5 at the same UTC hour, daylit footprints "
         f"(SZA < 90°) read {day_jump['pre-gap']:+.0%} (pre-gap) / {day_jump['post-gap']:+.0%} (post-gap) more than "
         f"night-side ones (SZA > {sza_min:g}°). The hour-matched ERA5 already contains the real day–night OLR "
-        "difference, so this excess is instrumental (shortwave contamination). The steepest change "
-        f"lies between ~92° and ~103° (physics_sza.png); {twilight:.0%} of the QC'd samples have SZA in "
+        "difference, so this excess is instrumental (shortwave contamination). The largest drop between adjacent "
+        f"5° bins lies between {steep['pre-gap'][0]:g}° and {steep['pre-gap'][1]:g}° pre-gap "
+        f"({steep['pre-gap'][2]:.2f}) and between {steep['post-gap'][0]:g}° and {steep['post-gap'][1]:g}° post-gap "
+        f"({steep['post-gap'][2]:.2f}) (physics_sza.png); {twilight:.0%} of the QC'd samples have SZA in "
         f"({sza_min:g}°, {sza_min + 5:g}°], where post-gap values still drift slightly (possible residual twilight).",
         f"- **Not angle-corrected.** Relative to night-time ERA5, CLARA falls steeply beyond VZA ≈ 60° "
         f"(physics_vza.png). Within the kept range (VZA ≤ {vza_max:g}°) the binned ratio CLARA / ERA5 still varies by "
         f"{spread['pre-gap']:.0%} (pre-gap) and {spread['post-gap']:.0%} (post-gap) of its mean. VZA is not an "
         "allowed predictor, so this residual geometry effect becomes noise.",
-        f"- **The regime step is calibration, not geometry.** At the same viewing angles (VZA 40–55°), CLARA / ERA5 "
+        f"- **The regime step is calibration, not geometry.** At the same viewing angles (VZA {VZA_MID[0]}–{VZA_MID[1]}°), CLARA / ERA5 "
         f"night is {mid.get('pre-gap', np.nan):.2f} sr⁻¹ pre-gap but {mid.get('post-gap', np.nan):.2f} sr⁻¹ post-gap "
         f"({mid.get('post-gap', np.nan) / mid.get('pre-gap', np.nan) - 1:+.0%}).",
         "- **The observing geometry drifts.** Satellite altitude, local solar time of the night samples, VZA "

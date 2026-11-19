@@ -117,6 +117,18 @@ def hatch(ax, mask, res):
     ax.contourf(lon_c, lat_c, np.nan_to_num(mask), levels=[0.5, 1.5], colors="none", hatches=["////"], **extra)
 
 
+def map_limits(grid):
+    """One colour scale per quantity for every map, monthly and in the paper: CLARA OLR (observed and predicted,
+    1st-99th percentile rounded to 10), latent SD (0 to its 99th percentile) and residuals (+-98th percentile of
+    |residual|, rounded up to 5), all in W m-2 sr-1, over every month."""
+    vals = np.concatenate([grid.pred_mean.dropna(), grid.clara.dropna()])
+    olr = tuple(np.percentile(vals, [1, 99]).round(-1))
+    umax = np.ceil(np.nanpercentile(grid.latent_sd, 99))
+    rlim = np.ceil(np.nanpercentile(np.abs(np.r_[grid.residual_insample.dropna(), grid.residual_oos_spatial.dropna()]),
+                                    98) / 5) * 5
+    return olr, umax, rlim
+
+
 def map_one(values, res, cmap, vmin, vmax, label, head, path, extend="both", fallback=None):
     fig = plt.figure(figsize=(9, 5), layout="constrained")
     ax = map_axes(fig, 1, 1, 1)
@@ -198,11 +210,7 @@ def main():
     n_rows = write_grid_table(cfg, grid, out / "grid_predictions.csv")
     print(f"wrote {n_rows:,} cell-months (every cell of every month) to {out / 'grid_predictions.csv'}")
 
-    vals = np.concatenate([grid.pred_mean.dropna(), grid.clara.dropna()])
-    vmin, vmax = np.percentile(vals, [1, 99]).round(-1)
-    umax = np.ceil(np.nanpercentile(grid.latent_sd, 99))
-    rlim = np.ceil(np.nanpercentile(np.abs(np.r_[grid.residual_insample.dropna(), grid.residual_oos_spatial.dropna()]),
-                                    98) / 5) * 5
+    (vmin, vmax), umax, rlim = map_limits(grid)
     label = KERNEL_LABELS[kernel]
     for year, g in grid.groupby("year"):
         ydir = out / str(year)

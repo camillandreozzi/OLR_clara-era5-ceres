@@ -6,7 +6,7 @@ Configuration: `config/pipeline.toml`, grid 5 deg, QC night SZA > 100 deg and VZ
 |---|---|---|---|
 | 1 | CLARA OLR (a radiance) used as stored, W m-2 sr-1 positive upward; ERA5 OLR = -ttr/3600 per hourly accumulation (monthly by hour of day) | ERA5 ttr is a J m-2 accumulation, negative upward; validated: the 24 h mean of the hourly product equals the monthly product to 0.0071 W m-2 | none |
 | 2 | Physical-unit harmonisation only; y and ERA5 are standardised inside each CV fold with training rows | prevents leakage of test-fold statistics | none |
-| 3 | QC: read_in earth_view & in_range [50 (raised {2024: 75.0, 2025: 90.0}), 400] W m-2 sr-1, footprint SZA > 100 deg, VZA <= 60 deg | CLARA measures OLR on the night side only; relative to ERA5, daylit footprints read 40-54 % higher; VZA > 60 deg shows strong limb darkening (results/eda/physics_*.png) | keeps 225,460 of 470,515 usable samples (48%) |
+| 3 | QC: read_in earth_view & in_range [50 (raised {2024: 75.0, 2025: 90.0}), 400] W m-2 sr-1, footprint SZA > 100 deg, VZA <= 60 deg | CLARA measures OLR on the night side only; relative to ERA5, daylit footprints read 40-54 % higher; VZA > 60 deg shows strong limb darkening (results/eda/physics_*.png); the lower limit sits in the trough between near-zero non-OLR readings and the Earth-OLR mode of each year's Earth-viewing histogram, which lies at 49-55 W m-2 sr-1 in 2020-2023 and moves up to ~75 in 2024, ~86 in 2025, ~70 in 2026 (olr_min_by_year.csv); raising the limit removes 1,380 QC'd samples (0.6%) | keeps 225,460 of 470,515 usable samples (48%) |
 | 4 | Overpasses: consecutive QC'd samples separated by <= 20 min belong to one overpass; n_overpasses per cell-month enters the noise model | samples along one track are strongly correlated (lag-1 r ~ 0.9), so the sampling error scales with overpasses, not samples | none |
 | 5 | Monthly resolution, 5 deg cells (grid.res_deg; user and supervisor choice), model time = middle of the month | ERA5 night-time product is monthly; a cell-month mean is the CLARA estimand | CLARA values are only binned by footprint centre, never interpolated or copied to another cell. 5 deg is coarser than ERA5 and no finer than CLARA's effective footprint. "day" is not used as a predictor |
 | 6 | ERA5 night-time mean: hourly monthly means weighted by the fraction of the month's days on which each hour is night (SZA > 100 deg at the 1 deg cell centre); polar-day cells (no night hour in the month) use the mean of the 3 darkest hours instead and are flagged night_fallback | matches what CLARA can observe; a 24 h mean mixes in daytime OLR; the fallback gives the prediction grid every lat-lon cell (user requirement) | the fallback value is a different quantity (darkest hours of a sunlit month) and CLARA never observes those cells: predictions there are extrapolation and are hatched on maps |
@@ -26,6 +26,21 @@ Configuration: `config/pipeline.toml`, grid 5 deg, QC night SZA > 100 deg and VZ
 | Earth viewing & in range (read_in usable) | 470,515 | 1.000 |
 | + night side (SZA > 100 deg) | 358,995 | 0.763 |
 | + VZA <= 60 deg (model observations) | 225,460 | 0.479 |
+
+## Lower radiance limit by year
+
+Trough of each year's Earth-viewing histogram (W m-2 sr-1) against the lower in_range limit, and the QC'd samples that
+raising the limit above 50 removed (olr_min_by_year.csv; harmonise.olr_min_by_year):
+
+| year | earth_view_samples | trough | lower_limit | share_below_limit | qc_samples_at_base_limit | removed_by_raise | removed_share |
+|---|---|---|---|---|---|---|---|
+| 2020 | 208,546 | 55 | 50 | 12.1% | 132,246 | 0 | 0.0% |
+| 2021 | 132,289 | 55 | 50 | 15.1% | 61,770 | 0 | 0.0% |
+| 2022 | 29,786 | 49 | 50 | 15.1% | 1,473 | 0 | 0.0% |
+| 2023 | 59,727 | 49 | 50 | 6.0% | 9,899 | 0 | 0.0% |
+| 2024 | 38,807 | 75 | 75 | 17.6% | 4,323 | 159 | 3.7% |
+| 2025 | 46,776 | 86 | 90 | 28.2% | 8,717 | 697 | 8.0% |
+| 2026 | 40,751 | 70 | 90 | 17.6% | 8,412 | 524 | 6.2% |
 
 ## Validation checks
 

@@ -125,6 +125,7 @@ The pipeline runs in six stages. Folders in the figure are files on disk. Every 
 | 6 | [`predict_maps.py`](src/predict_maps.py) | Whole-grid prediction table, monthly maps, NetCDF/CSV and global-mean series |
 | 6 | [`kernel_global_means.py`](src/kernel_global_means.py) | Global mean of every kernel's full-data fit, through the gap |
 | 6 | [`report.py`](src/report.py) | Final report from the generated tables |
+| 6 | [`paper_figures.py`](src/paper_figures.py) | The paper's 17 figures at print size (8.5 or 17.5 cm, text ≥ 8 pt), from the generated tables |
 | – | [`gp.py`](src/gp.py) | The GP model, the three kernels and the chunked VFE bound (PyTorch) |
 | – | [`cv.py`](src/cv.py) | Fold definitions, metrics, paired block bootstrap, winner criterion |
 | – | [`config.py`](src/config.py), [`solar.py`](src/solar.py), [`style.py`](src/style.py) | Config loading, NOAA solar geometry, shared figure style |
@@ -238,6 +239,7 @@ python src/run_cv.py --summarise                         # adds model_comparison
 python src/predict_maps.py                               # winner read from kernel_comparison.csv
 python src/kernel_global_means.py                        # every kernel's global mean through the gap
 python src/report.py
+python src/paper_figures.py                              # the paper's figures at print size (docs/paper/figures/)
 ```
 
 ERA5 downloads resume where they stopped, and a re-run fills in months published since the last one. To
@@ -320,6 +322,8 @@ Then archive or delete `results/model/` and `logs/`. Make the folds again locall
 | `results/model/<winner>/global_mean_monthly.*` | Area-weighted global mean with variance from the full posterior covariance |
 | `results/model/kernel_global_means.csv`, `kernel_gap_summary.csv` | The same global mean for every kernel, and their spread before, in and after the gap; figure `figures/kernel_global_means.png` |
 | `results/report/report.md` | Final report |
+| `docs/paper/figures/<name>.pdf` | The paper's figures at their print width (8.5 cm one column, 17.5 cm two), every text ≥ 8 pt, one unit and colour scale per quantity; `png/` holds 300 dpi previews (local only) |
+| `results/report/numbers.tex` | Every number the paper quotes, as LaTeX macros with their source table; `docs/paper/main.tex` inputs it and types no number by hand (`python src/report.py --check-tex docs/paper/main.tex`) |
 
 The prediction NetCDF has dims `(time, lat, lon)` on the 5° grid. All CLARA quantities (predictions, SDs,
 residuals, mean function) are in CLARA's radiance units, W m⁻² sr⁻¹; `era5_night` is a flux in W m⁻²:

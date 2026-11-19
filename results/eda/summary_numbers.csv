@@ -1,0 +1,54 @@
+name,value,description
+n_obs,37898.0,observed cell-months
+months_observed,68.0,months with at least one observed cell-month
+n_obs_pre,22562.0,"observed cell-months, pre-gap"
+n_obs_post,15336.0,"observed cell-months, post-gap"
+daylit_excess_pre,0.5397988921955668,"CLARA / hour-matched ERA5, daylit (SZA < 90) over night side, minus 1, pre-gap"
+daylit_excess_post,0.40266220336683944,"same, post-gap"
+sza_steep_lo_pre,92.5,"SZA bin centre (deg) before the largest drop between adjacent bins, pre-gap"
+sza_steep_hi_pre,97.5,"SZA bin centre (deg) after the largest drop, pre-gap"
+sza_steep_drop_pre,0.27224822406096905,"that drop of CLARA / ERA5 hour, pre-gap"
+sza_steep_lo_post,82.5,"SZA bin centre (deg) before the largest drop, post-gap"
+sza_steep_hi_post,87.5,"SZA bin centre (deg) after the largest drop, post-gap"
+sza_steep_drop_post,0.06694185588601864,"that drop, post-gap"
+twilight_share,0.04982702031402466,"share of QC'd samples with SZA in (100, 105] deg"
+vza_spread_pre,0.3073873878346114,"(max - min) / mean of binned CLARA / ERA5 night for VZA < 60, pre-gap"
+vza_spread_post,0.1112098577380033,"same, post-gap"
+vza_mid_lo,40.0,lower VZA (deg) of the same-angle step comparison
+vza_mid_hi,55.0,upper VZA (deg) of the same-angle step comparison
+ratio_vza_mid_pre,0.7129126376911903,"CLARA / ERA5 night at those VZA, pre-gap (sr-1)"
+ratio_vza_mid_post,0.8744602356769592,"same, post-gap (sr-1)"
+step_vza_mid,0.22660223629777465,relative step at those VZA
+ratio_all,0.743609439484604,ratio of means CLARA / ERA5 night (sr-1)
+slope_all,0.4189800967868942,weighted slope CLARA on ERA5 night (sr-1)
+rel_slope,0.5634410680387402,slope relative to the means
+ratio_pre,0.6919869867317253,"ratio of means, pre-gap (sr-1)"
+ratio_post,0.8491293861456639,"ratio of means, post-gap (sr-1)"
+step_ratio,0.22708866268732408,relative rise of CLARA / ERA5 across the gap
+zonal_r,0.9279928607874541,correlation of the zonal-mean profiles of CLARA and ERA5 night
+zonal_contrast,0.7419882780069296,"CLARA's equator-to-pole contrast relative to its mean, as a share of ERA5's"
+along_track_r,0.8760311735672663,along-track autocorrelation of CLARA at the first lag
+along_track_km,231.62165729970923,distance (km) of that first lag
+along_track_efold_km,1859.453363653792,distance (km) at which CLARA / ERA5 along-track correlation falls to 1/e
+smooth_best_radius_km,600.0,ERA5 cap radius (km) with the highest pooled r
+smooth_best_r,0.33721058439397095,that r
+smooth_r0,0.33337477581743963,pooled r without smoothing
+corr_c,0.34529631605436445,fitted correlogram height c (structured share of the residual variance)
+corr_range_km,1056.0076229638792,"fitted correlogram range (km), all data"
+corr_range_pre_km,1200.780538344926,"fitted range (km), pre-gap"
+corr_range_post_km,942.7507589889321,"fitted range (km), post-gap"
+nugget_share,0.6547036839456355,nugget share of the residual variance
+acf_lag1,0.14834777325084866,fixed-cell residual autocorrelation at 1 month
+acf_lag2,0.08947658243700143,"same, 2 months"
+acf_lag6,0.008243553594790842,"same, 6 months"
+acf_lag12,0.1128422946481933,"same, 12 months"
+daily_lag1_r,0.19619671851063217,day-to-day lag-1 correlation
+within_month_sd,33.58897997283633,within-cell-month SD of CLARA daily means (W m-2 sr-1)
+within_month_sd_share,0.18882398730304695,that SD over the mean CLARA value
+daylit_from_year,2023.0,first year in which most usable samples are daylit
+daylit_share_min_from,0.6415923762680602,lowest yearly daylit share from that year on
+daylit_share_max_from,0.7998775418130257,highest yearly daylit share from that year on
+altitude_first_km,594.3877734815128,"mean satellite altitude (km), first month"
+altitude_last_km,536.01628305196,"mean satellite altitude (km), last month"
+cv_block_km,6672.0,side of a spatial CV block (km)
+cv_buffer_needed_km,1500.0,fitted range rounded up to 500 km

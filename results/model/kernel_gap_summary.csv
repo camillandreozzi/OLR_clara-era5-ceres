@@ -1,0 +1,4 @@
+period,months,mean_kernel_spread,max_kernel_spread,month_of_max_spread,months_spread_above_2sd_exponential,mean_sd_exponential,mean_sd_gaussian,mean_sd_matern32,mean_global_mean_exponential,mean_global_mean_gaussian,mean_global_mean_matern32
+pre-gap,20,1.932,4.217,2021-07,5,1.277,2.071,1.911,168.773,168.449,168.356
+gap,9,5.251,13.015,2021-09,2,5.046,6.494,12.444,193.021,197.271,194.868
+post-gap,52,4.949,10.365,2026-06,24,2.403,3.960,4.111,201.056,199.517,199.383

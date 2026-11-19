@@ -186,7 +186,9 @@ def olr_min_by_year(s, cfg, lo=20.0, hi=160.0, smooth_bins=5):
     not Earth OLR, and the Earth-OLR mode. The lower limit belongs in the trough between them. The trough is the
     minimum, between lo and hi, of the year's histogram (plot_olr_hist bins, ~5.2 W m-2 sr-1) after a running mean
     over smooth_bins bins. `removed_by_raise` counts the samples that pass every other QC step (night side, VZA,
-    upper limit) and lie between read_in.OLR_MIN and the year's raised limit: what raising the limit removed."""
+    upper limit) and lie between read_in.OLR_MIN and the year's raised limit: what raising the limit removed.
+    `between_trough_and_limit` counts those of them at or above the year's own trough: what the limit removes that
+    the year's histogram alone would keep (non-zero only where a year inherits a limit above its trough)."""
     from plot_olr_hist import BINS
 
     ctr = 0.5 * (BINS[1:] + BINS[:-1])
@@ -200,7 +202,8 @@ def olr_min_by_year(s, cfg, lo=20.0, hi=160.0, smooth_bins=5):
         kept_otherwise = g.night & g.vza_ok & (g.olr <= read_in.OLR_MAX) & (g.olr >= read_in.OLR_MIN)
         rows.append({"year": int(year), "earth_view_samples": len(g), "trough": trough, "lower_limit": cut,
                      "share_below_limit": (g.olr < cut).mean(), "qc_samples_at_base_limit": int(kept_otherwise.sum()),
-                     "removed_by_raise": int((kept_otherwise & (g.olr < cut)).sum())})
+                     "removed_by_raise": int((kept_otherwise & (g.olr < cut)).sum()),
+                     "between_trough_and_limit": int((kept_otherwise & (g.olr >= trough) & (g.olr < cut)).sum())})
     out = pd.DataFrame(rows)
     out["removed_share"] = out.removed_by_raise / out.qc_samples_at_base_limit
     return out
@@ -319,7 +322,14 @@ def main():
     summary = obs.groupby("period").agg(cell_months=("clara", "size"), months=("time", "nunique"),
                                         median_samples=("n_samples", "median"),
                                         median_overpasses=("n_overpasses", "median"),
+                                        single_overpass_share=("n_overpasses", lambda n: (n == 1).mean()),
                                         clara_mean=("clara", "mean"), era5_night_mean=("era5_night_r0", "mean"))
+    q = s[s.qc]
+    qper = q.time.dt.to_period("M")
+    gs, ge = pd.Period(cfg["time"]["gap_start"], "M"), pd.Period(cfg["time"]["gap_end"], "M")
+    qlab = np.where(qper < gs, "pre-gap", np.where(qper > ge, "post-gap", "gap"))
+    summary["qc_samples"] = q.groupby(qlab).size()
+    summary["overpasses"] = q.groupby(qlab).overpass.nunique()  # distinct overpasses (one may span two months)
     summary.to_csv(out / "observations_summary.csv")
     nv = pd.read_csv(out / "era5_night_validation.csv")
     (out / "decisions.md").write_text(DECISIONS.format(
@@ -335,7 +345,7 @@ def main():
                   "while the GP's latent field stays smooth on its fitted length scales." if res == 1 else
                   f"{res} deg is coarser than ERA5 and no finer than CLARA's effective footprint."),
         olr_min_note=olr_min_note(omin),
-        olr_min_table=md_table(omin.assign(trough=omin.trough.map("{:.0f}".format),
+        olr_min_table=md_table(omin.assign(year=omin.year.astype(str), trough=omin.trough.map("{:.0f}".format),
                                            lower_limit=omin.lower_limit.map("{:g}".format),
                                            share_below_limit=omin.share_below_limit.map("{:.1%}".format),
                                            removed_share=omin.removed_share.map("{:.1%}".format))),

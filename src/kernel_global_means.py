@@ -94,8 +94,9 @@ def figure(km, cfg, winner, path):
                 label=f"{KERNEL_LABELS[k]}{' (CV winner)' if k == winner else ''} ± 2 SD")
     ends = piv.iloc[-1].sort_values()
     ypos = ends.to_numpy().copy()
-    for i in range(1, len(ypos)):  # keep end labels apart by at least 2.5 units
-        ypos[i] = max(ypos[i], ypos[i - 1] + 2.5)
+    gap = 0.06 * np.ptp(ax.get_ylim())  # keep end labels apart by 6 % of the axis height
+    for i in range(1, len(ypos)):
+        ypos[i] = max(ypos[i], ypos[i - 1] + gap)
     for (k, _), y in zip(ends.items(), ypos):
         ax.annotate(KERNEL_LABELS[k], (piv.index[-1], y), xytext=(6, 0), textcoords="offset points", va="center",
                     fontsize=7, color=INK)
@@ -111,8 +112,8 @@ def figure(km, cfg, winner, path):
     ax.plot(sd.index, 2 * sd[winner], color=KERNEL_COLORS[winner], lw=1.4, ls=LINESTYLES[winner],
             label=f"2 SD of the {KERNEL_LABELS[winner]} global mean")
     t_max = spread.idxmax()
-    ax.annotate(f"{spread.max():.1f} in {t_max:%Y-%m}", (t_max, spread.max()), xytext=(8, -2),
-                textcoords="offset points", fontsize=8, color=INK, va="top")
+    ax.annotate(f"{spread.max():.1f} in {t_max:%Y-%m}", (t_max, spread.max()), xytext=(-6, 0),
+                textcoords="offset points", fontsize=8, color=INK, va="top", ha="right")
     ax.set_ylim(0, None)
     ax.set_ylabel(CLARA_UNIT, color=INK, fontsize=8)
     ax.legend(frameon=False, fontsize=7, loc="upper right")

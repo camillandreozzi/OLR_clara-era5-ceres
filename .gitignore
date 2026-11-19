@@ -29,8 +29,14 @@ results/*_1deg/
 # Conference overview slide (local only)
 slide/
 
-# Manuscript draft (local only)
-docs/paper/
+# Manuscript: the source, the bibliography and the figures (src/paper_figures.py) are tracked; PDF builds, drafts,
+# backups and PNG previews stay local
+docs/paper/*
+!docs/paper/main.tex
+!docs/paper/refs.bib
+!docs/paper/figures/
+docs/paper/figures/*
+!docs/paper/figures/*.pdf
 
 # Graubünden forscht 2026 talk (local only)
 presentation_graubuenden_forscht_2026/
