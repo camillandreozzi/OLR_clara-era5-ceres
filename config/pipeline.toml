@@ -3,7 +3,8 @@
 # Physical thresholds are instrument physics, chosen from the EDA diagnostics, never tuned for skill.
 
 [qc]
-# On top of read_in's earth_view & in_range (CLARA OLR in [50 (75 from 2024), 400] W m-2 sr-1):
+# On top of read_in's earth_view & in_range (CLARA OLR in [50 (75 from 2024, 90 from 2025), 400] W m-2 sr-1;
+# the lower limit follows the trough below the Earth-OLR mode of each year, see results/preprocessing/olr_min_by_year.csv):
 night_sza_min = 100.0   # deg, footprint solar zenith angle; CLARA measures OLR on the night side only
 vza_max = 60.0          # deg, viewing zenith angle at the footprint; larger angles see a colder limb path
 overpass_gap_min = 20.0 # min, a gap longer than this starts a new overpass (orbit period ~96 min)

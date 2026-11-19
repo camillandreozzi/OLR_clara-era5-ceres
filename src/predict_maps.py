@@ -62,10 +62,18 @@ def predict_grid(cfg, model, radius):
         grid.loc[ok, col] = v
     grid["era5_night"] = e
     grid["residual_insample"] = np.where(grid.clara_observed, grid.clara - grid.pred_mean, np.nan)
-    files =sorted((config.MODEL_DIR / model.family / "folds").glob("spatial_[0-9][0-9].parquet"))
+    files = sorted((config.MODEL_DIR / model.family / "folds").glob("spatial_[0-9][0-9].parquet"))
+    pooled = config.MODEL_DIR / model.family / "oos_predictions_spatial.csv"
     if files:
         oos = pd.concat([pd.read_parquet(f, columns=["obs_id", "residual"]) for f in files])
         grid = grid.merge(oos.rename(columns={"residual": "residual_oos_spatial"}), on="obs_id", how="left")
+        grid.loc[~grid.clara_observed, "residual_oos_spatial"] = np.nan
+    elif pooled.exists():  # the per-fold caches are not tracked; the pooled table is, keyed by cell-month
+        key = ["time", "lat", "lon"]
+        oos = pd.read_csv(pooled, usecols=key + ["residual"], parse_dates=["time"])
+        oos["lat"], oos["lon"] = oos.lat.round(4), oos.lon.round(4)
+        oos["time"] = oos.time.astype(grid.time.dtype)
+        grid = grid.merge(oos.rename(columns={"residual": "residual_oos_spatial"}), on=key, how="left")
         grid.loc[~grid.clara_observed, "residual_oos_spatial"] = np.nan
     else:
         grid["residual_oos_spatial"] = np.nan

@@ -179,6 +179,47 @@ def qc_counts(s, cfg):
     return pd.DataFrame(rows)
 
 
+def olr_min_by_year(s, cfg, lo=20.0, hi=160.0, smooth_bins=5):
+    """Per year: where the lower in_range limit sits relative to the Earth-viewing CLARA histogram, and what it costs.
+
+    Earth-viewing samples within [0, 500] W m-2 sr-1 form two populations: a pile-up of near-zero readings that are
+    not Earth OLR, and the Earth-OLR mode. The lower limit belongs in the trough between them. The trough is the
+    minimum, between lo and hi, of the year's histogram (plot_olr_hist bins, ~5.2 W m-2 sr-1) after a running mean
+    over smooth_bins bins. `removed_by_raise` counts the samples that pass every other QC step (night side, VZA,
+    upper limit) and lie between read_in.OLR_MIN and the year's raised limit: what raising the limit removed."""
+    from plot_olr_hist import BINS
+
+    ctr = 0.5 * (BINS[1:] + BINS[:-1])
+    win = (ctr >= lo) & (ctr <= hi)
+    ev = s[s.earth_view & s.olr.between(0, 500)]
+    rows = []
+    for year, g in ev.groupby(ev.time.dt.year):
+        h = np.convolve(np.histogram(g.olr, BINS)[0], np.ones(smooth_bins) / smooth_bins, mode="same")
+        trough = ctr[win][np.argmin(h[win])]
+        cut = read_in.olr_min(g.time.iloc[:1])[0]
+        kept_otherwise = g.night & g.vza_ok & (g.olr <= read_in.OLR_MAX) & (g.olr >= read_in.OLR_MIN)
+        rows.append({"year": int(year), "earth_view_samples": len(g), "trough": trough, "lower_limit": cut,
+                     "share_below_limit": (g.olr < cut).mean(), "qc_samples_at_base_limit": int(kept_otherwise.sum()),
+                     "removed_by_raise": int((kept_otherwise & (g.olr < cut)).sum())})
+    out = pd.DataFrame(rows)
+    out["removed_share"] = out.removed_by_raise / out.qc_samples_at_base_limit
+    return out
+
+
+def olr_min_note(t):
+    """One sentence for decisions.md on why the lower limit is raised, from olr_min_by_year()."""
+    base = t[t.lower_limit == read_in.OLR_MIN]
+    raised = t[t.lower_limit > read_in.OLR_MIN]
+    if raised.empty:
+        return ""
+    years = ", ".join(f"~{r.trough:.0f} in {r.year}" for r in raised.itertuples())
+    return (f"; the lower limit sits in the trough between near-zero non-OLR readings and the Earth-OLR mode of each "
+            f"year's Earth-viewing histogram, which lies at {base.trough.min():.0f}-{base.trough.max():.0f} W m-2 sr-1 in "
+            f"{base.year.min()}-{base.year.max()} and moves up to {years} (olr_min_by_year.csv); raising the limit "
+            f"removes {raised.removed_by_raise.sum():,} QC'd samples "
+            f"({raised.removed_by_raise.sum() / t.qc_samples_at_base_limit.sum():.1%})")
+
+
 EXPECTED_OBS = {1: "~188 k (1 deg feasibility test)", 5: "~38 k (inspection)"}
 
 
@@ -221,7 +262,7 @@ Configuration: `{cfg_path}`, grid {res} deg, QC night SZA > {sza:g} deg and VZA 
 |---|---|---|---|
 | 1 | CLARA OLR (a radiance) used as stored, W m-2 sr-1 positive upward; ERA5 OLR = -ttr/3600 per hourly accumulation (monthly by hour of day) | ERA5 ttr is a J m-2 accumulation, negative upward; validated: the 24 h mean of the hourly product equals the monthly product to {maxdiff:.4f} W m-2 | none |
 | 2 | Physical-unit harmonisation only; y and ERA5 are standardised inside each CV fold with training rows | prevents leakage of test-fold statistics | none |
-| 3 | QC: read_in earth_view & in_range [{olr_min:g} (raised {olr_from}), {olr_max:g}] W m-2 sr-1, footprint SZA > {sza:g} deg, VZA <= {vza:g} deg | CLARA measures OLR on the night side only; relative to ERA5, daylit footprints read 40-54 % higher; VZA > 60 deg shows strong limb darkening (results/eda/physics_*.png) | keeps {n_qc:,} of {n_usable:,} usable samples ({frac_qc:.0%}) |
+| 3 | QC: read_in earth_view & in_range [{olr_min:g} (raised {olr_from}), {olr_max:g}] W m-2 sr-1, footprint SZA > {sza:g} deg, VZA <= {vza:g} deg | CLARA measures OLR on the night side only; relative to ERA5, daylit footprints read 40-54 % higher; VZA > 60 deg shows strong limb darkening (results/eda/physics_*.png){olr_min_note} | keeps {n_qc:,} of {n_usable:,} usable samples ({frac_qc:.0%}) |
 | 4 | Overpasses: consecutive QC'd samples separated by <= {gap:g} min belong to one overpass; n_overpasses per cell-month enters the noise model | samples along one track are strongly correlated (lag-1 r ~ 0.9), so the sampling error scales with overpasses, not samples | none |
 | 5 | Monthly resolution, {res} deg cells (grid.res_deg; user and supervisor choice), model time = middle of the month | ERA5 night-time product is monthly; a cell-month mean is the CLARA estimand | CLARA values are only binned by footprint centre, never interpolated or copied to another cell. {res_note} "day" is not used as a predictor |
 | 6 | ERA5 night-time mean: hourly monthly means weighted by the fraction of the month's days on which each hour is night (SZA > {sza:g} deg at the 1 deg cell centre); polar-day cells (no night hour in the month) use the mean of the {n_dark} darkest hours instead and are flagged night_fallback | matches what CLARA can observe; a 24 h mean mixes in daytime OLR; the fallback gives the prediction grid every lat-lon cell (user requirement) | the fallback value is a different quantity (darkest hours of a sunlit month) and CLARA never observes those cells: predictions there are extrapolation and are hatched on maps |
@@ -234,6 +275,13 @@ Configuration: `{cfg_path}`, grid {res} deg, QC night SZA > {sza:g} deg and VZA 
 ## Attrition
 
 {qc_table}
+
+## Lower radiance limit by year
+
+Trough of each year's Earth-viewing histogram (W m-2 sr-1) against the lower in_range limit, and the QC'd samples that
+raising the limit above {olr_min:g} removed (olr_min_by_year.csv; harmonise.olr_min_by_year):
+
+{olr_min_table}
 
 ## Validation checks
 
@@ -264,8 +312,10 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     qc = qc_counts(s, cfg)
     val = validation_checks(obs, grid, cfg)
+    omin = olr_min_by_year(s, cfg)
     qc.to_csv(out / "qc_counts.csv", index=False)
     val.to_csv(out / "validation_checks.csv", index=False)
+    omin.to_csv(out / "olr_min_by_year.csv", index=False, float_format="%.4f")
     summary = obs.groupby("period").agg(cell_months=("clara", "size"), months=("time", "nunique"),
                                         median_samples=("n_samples", "median"),
                                         median_overpasses=("n_overpasses", "median"),
@@ -284,6 +334,11 @@ def main():
                   "effective resolution (~10^3 km, EDA), so 1 deg detail in the maps comes from ERA5 through beta1, "
                   "while the GP's latent field stays smooth on its fitted length scales." if res == 1 else
                   f"{res} deg is coarser than ERA5 and no finer than CLARA's effective footprint."),
+        olr_min_note=olr_min_note(omin),
+        olr_min_table=md_table(omin.assign(trough=omin.trough.map("{:.0f}".format),
+                                           lower_limit=omin.lower_limit.map("{:g}".format),
+                                           share_below_limit=omin.share_below_limit.map("{:.1%}".format),
+                                           removed_share=omin.removed_share.map("{:.1%}".format))),
         qc_table=md_table(qc), val_table=md_table(val.astype({"value": float}))))
     config.save(cfg, out / "config_used.json")
     print(qc.to_string(index=False))

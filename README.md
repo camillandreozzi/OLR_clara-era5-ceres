@@ -104,7 +104,9 @@ The pipeline runs in six stages. Folders in the figure are files on disk. Every 
    - **b.** `predict_maps.py` predicts every cell-month and writes them all to one table,
      `grid_predictions.csv`. It draws maps of the prediction and its uncertainty for every month, and maps of
      the observations and residuals for the months CLARA observed.
-   - **c.** `report.py` writes the final report, reading every number from the generated tables.
+   - **c.** `kernel_global_means.py` applies every kernel's full-data fit to the grid and compares their
+     monthly global means through the 2021-22 gap, where cross-validation cannot score them.
+   - **d.** `report.py` writes the final report, reading every number from the generated tables.
 
 ### Modules
 
@@ -121,6 +123,7 @@ The pipeline runs in six stages. Folders in the figure are files on disk. Every 
 | 4 | [`benchmark_gp.py`](src/benchmark_gp.py) | Checks the sparse GP against the exact GP and its sensitivity to M |
 | 5 | [`baselines.py`](src/baselines.py) | Regression-only model and the registry of model ids for the 2 × 2 ablation |
 | 6 | [`predict_maps.py`](src/predict_maps.py) | Whole-grid prediction table, monthly maps, NetCDF/CSV and global-mean series |
+| 6 | [`kernel_global_means.py`](src/kernel_global_means.py) | Global mean of every kernel's full-data fit, through the gap |
 | 6 | [`report.py`](src/report.py) | Final report from the generated tables |
 | – | [`gp.py`](src/gp.py) | The GP model, the three kernels and the chunked VFE bound (PyTorch) |
 | – | [`cv.py`](src/cv.py) | Fold definitions, metrics, paired block bootstrap, winner criterion |
@@ -233,6 +236,7 @@ python src/run_cv.py --summarise                         # adds model_comparison
 
 # 6 · Map the winning kernel
 python src/predict_maps.py                               # winner read from kernel_comparison.csv
+python src/kernel_global_means.py                        # every kernel's global mean through the gap
 python src/report.py
 ```
 
@@ -302,7 +306,7 @@ Then archive or delete `results/model/` and `logs/`. Make the folds again locall
 | Path | Content |
 |---|---|
 | `results/eda/inventory/` | File inventory, coverage by month, dataset comparison |
-| `results/preprocessing/` | `decisions.md` (every preprocessing choice and why), QC attrition, validation checks |
+| `results/preprocessing/` | `decisions.md` (every preprocessing choice and why), QC attrition, validation checks, `olr_min_by_year.csv` (why the lower radiance limit rises in 2024 and 2025) |
 | `results/eda/` | EDA figures and tables, and **`summary.md`** with the key numbers and the CV settings they imply |
 | `results/model/folds.csv` | Fold table (+ `folds_sha256.txt`, `fold_summary.csv`) |
 | `results/model/benchmark/` | Sparse (VFE) vs exact GP, M sensitivity |
@@ -314,6 +318,7 @@ Then archive or delete `results/model/` and `logs/`. Make the folds again locall
 | `results/model/<winner>/grid_predictions.csv` | **Every cell of every month** in one table (209,952 rows): prediction, uncertainties, ERA5, `post_gap`, CLARA where observed, residuals, flags |
 | `results/model/<winner>/<yyyy>/` | Maps for every month (predicted, uncertainty; observed and residuals where CLARA observed), `<yyyy>_predictions.nc`, monthly CSVs |
 | `results/model/<winner>/global_mean_monthly.*` | Area-weighted global mean with variance from the full posterior covariance |
+| `results/model/kernel_global_means.csv`, `kernel_gap_summary.csv` | The same global mean for every kernel, and their spread before, in and after the gap; figure `figures/kernel_global_means.png` |
 | `results/report/report.md` | Final report |
 
 The prediction NetCDF has dims `(time, lat, lon)` on the 5° grid. All CLARA quantities (predictions, SDs,
@@ -404,6 +409,10 @@ types with equal weight. Calibration is checked with interval coverage and PIT h
   the regression slope β₁ (sr⁻¹) converts ERA5 into CLARA's units inside the model.
 - **Night side only.** Relative to hour-matched ERA5, daylit footprints read 40–54 % higher than night-side
   ones (shortwave contamination), so only footprints with SZA > 100° are used.
+- **Radiance range.** Earth-viewing samples also hold a pile-up of near-zero readings that are not Earth OLR.
+  The lower limit (50 W m⁻² sr⁻¹; 75 from 2024, 90 from 2025, in `read_in.OLR_MIN_FROM`) sits in the trough
+  between them and the Earth-OLR mode, which moves up in the later years
+  (`results/preprocessing/olr_min_by_year.csv`).
 - **Not angle-corrected.** CLARA falls steeply beyond VZA ≈ 60°, and a residual geometry effect remains
   within the kept range. VZA is deliberately not a predictor, so this effect becomes noise.
 - **Calibration step.** CLARA's level relative to ERA5 rises by about 23 % across the 2021-09 → 2022-05 data

@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 import config
+import cv
 from style import KERNEL_LABELS, model_label
 
 R = config.RESULTS_DIR
@@ -65,7 +66,8 @@ def status_table():
                 p = R / f"model/{k}/oos_predictions_{t}_part1.csv"
             items.append((f"CV {k} {t}", p))
         items.append((f"Full fit {k}", R / f"model/{k}/full_model.pt"))
-    items += [("Kernel comparison", R / "model/kernel_comparison.csv")]
+    items += [("Kernel comparison", R / "model/kernel_comparison.csv"),
+              ("Global mean of every kernel", R / "model/kernel_global_means.csv")]
     comp = read(R / "model/kernel_comparison.csv")
     if comp is not None:
         w = comp.kernel.iloc[0]
@@ -135,6 +137,105 @@ def baseline_section(winner):
                   md(pd.DataFrame(rows), "{:.2f}"), ""]
     fig = R / "model/figures/model_comparison.png"
     return lines + [f"Figure: [{rel(fig)}]({rel(fig)}).", ""]
+
+
+def period_band_section(winner):
+    """RMSE of the winner by period x latitude band for each validation type (pooled over held-out cell-months, as in
+    metrics_breakdown.csv), with the noise model's SD for comparison."""
+    files = {t: R / f"model/{winner}/oos_predictions_{t}.csv" for t in CV_TYPES}
+    if not all(p.exists() for p in files.values()):
+        return []
+    pred = pd.concat([pd.read_csv(p) for p in files.values()], ignore_index=True)
+    pred["noise_var"] = pred.pred_var_obs - pred.latent_var  # sigma0^2 + sigma1^2 / n of each held-out cell-month
+    pred["band"] = pd.Categorical(pred.band, [b for *_, b in cv.LAT_BANDS][::-1], ordered=True)
+    pred = pred[pred.period != "gap"]
+    rows = {}
+    for key, g in [((t, p, b), g) for (t, p, b), g in pred.groupby(["cv_type", "period", "band"], observed=True)] + \
+                  [((t, p, "all bands"), g) for (t, p), g in pred.groupby(["cv_type", "period"])]:
+        rows[key] = {"rmse": np.sqrt((g.residual ** 2).mean()), "noise": np.sqrt(g.noise_var.mean()), "n": len(g),
+                     "single": (g.n_overpasses == 1).mean()}
+    t = pd.DataFrame(rows).T
+    t.index.names = ["cv_type", "period", "band"]
+    order = list(pred.band.cat.categories) + ["all bands"]
+    piv = t.rmse.unstack(["cv_type", "period"]).reindex(order)
+    piv = piv[[(c, p) for c in CV_TYPES for p in ("pre-gap", "post-gap")]]
+    piv.columns = [f"{c} {p}" for c, p in piv.columns]
+    piv.index.name = "band"
+    sp = t.loc["spatial"]
+    pre, post = sp.loc["pre-gap"].drop("all bands"), sp.loc["post-gap"].drop("all bands")
+    better_after = [b for b in order[:-1] if post.rmse[b] < pre.rmse[b]]
+    worst_pre, best_pre = pre.rmse.idxmax(), pre.rmse.idxmin()
+    above = [b for b in order[:-1] if pre.rmse[b] > 1.25 * pre.noise[b]]  # well above the noise SD
+    small = t[(t.n < 100)].index
+    lines = ["", f"RMSE (W m⁻² sr⁻¹) of {KERNEL_LABELS[winner]} by latitude band and period, for each validation type "
+                 "(pooled over the held-out cell-months):", "", md(piv, "{:.1f}", index=True), "",
+             "In spatial CV:",
+             f"- **After the gap** the RMSE ({post.rmse.min():.1f}–{post.rmse.max():.1f}) is only a little above the SD "
+             f"of the observation noise ({post.noise.min():.1f}–{post.noise.max():.1f}, √(σ₀² + σ₁²/n) of the held-out "
+             f"cell-months): {post.single.min():.0%}–{post.single.max():.0%} of them rest on a single overpass, and the "
+             f"noise accounts for {(post.noise ** 2 / post.rmse ** 2).min():.0%}–"
+             f"{(post.noise ** 2 / post.rmse ** 2).max():.0%} of the mean squared error. No model can remove that part.",
+             f"- **Before the gap** the RMSE is lowest in {best_pre} ({pre.rmse[best_pre]:.1f}) and highest in "
+             f"{worst_pre} ({pre.rmse[worst_pre]:.1f}). "
+             + (f"Only in {', '.join(above)} is it well above the noise SD "
+                f"({', '.join(f'{pre.noise[b]:.1f}' for b in above)}): a genuine model error, not noise. " if above else "")
+             + ("Every band is worse after the gap." if not better_after else
+                f"Every band is worse after the gap except {', '.join(better_after)}. ")
+             + (f"Because {post.n[worst_pre] / (pre.n[worst_pre] + post.n[worst_pre]):.0%} of {worst_pre}'s held-out "
+                f"cell-months are post-gap, its poor pooled score in the band table above mixes both periods."
+                if worst_pre in better_after else ""),
+             ]
+    if len(small):
+        lines.append(f"- Joint-CV cells rest on as few as {int(t.n[small].min())} held-out cell-months "
+                     f"({', '.join(f'{b} {p}' for (c, p, b) in small)}); read those with care.")
+    return lines + [""]
+
+
+def kernel_gap_section(winner):
+    """Global mean of every kernel's full-data fit through the CLARA gap (kernel_global_means.py)."""
+    km, summ = read(R / "model/kernel_global_means.csv", parse_dates=["time"]), read(R / "model/kernel_gap_summary.csv")
+    fig = R / "model/figures/kernel_global_means.png"
+    head = ["### Global mean through the gap, by kernel"]
+    if km is None or summ is None:
+        return head + ["", "**Not available: run `src/kernel_global_means.py`.**", ""]
+    kernels = [k for k in KERNELS if k in set(km.kernel)]
+    gm = read(R / f"model/{winner}/global_mean_monthly.csv")
+    ratio = (gm.sd_full_covariance / gm.sd_if_independent) if gm is not None else None
+    s = summ.set_index("period")
+    t = pd.DataFrame({"months": s.months.astype(int).astype(str)}
+                     | {f"{KERNEL_LABELS[k]} mean": s[f"mean_global_mean_{k}"] for k in kernels}
+                     | {f"{KERNEL_LABELS[k]} SD": s[f"mean_sd_{k}"] for k in kernels}
+                     | {"spread mean": s.mean_kernel_spread, "spread max": s.max_kernel_spread,
+                        "month of max": s.month_of_max_spread})
+    gap, pre, post = s.loc["gap"], s.loc["pre-gap"], s.loc["post-gap"]
+    above = f"months_spread_above_2sd_{winner}"
+    lines = head + [
+        "The kernels cannot be told apart in cross-validation, which scores only cell-months CLARA observed. Each "
+        "kernel's full-data fit is applied to the whole grid and reduced to the global mean $G_t$ with its "
+        "full-covariance SD, as for the winner above (`src/kernel_global_means.py`; nothing is refitted).",
+        "", f"![Global mean of every kernel through the gap]({rel(fig)})", "",
+        "Per period: mean of the monthly global means and of their SDs, and the spread between the kernels "
+        "(max − min of the three global means in a month), all in W m⁻² sr⁻¹:", "",
+        md(t, "{:.1f}", index=True), "",
+        f"- **Outside the gap** the spread averages {pre.mean_kernel_spread:.1f} before and "
+        f"{post.mean_kernel_spread:.1f} after it; it exceeds 2 SD of the {KERNEL_LABELS[winner]} global mean in "
+        f"{int(pre[above])} of {int(pre.months)} and {int(post[above])} of {int(post.months)} months.",
+        f"- **In the gap** the spread averages {gap.mean_kernel_spread:.1f} and peaks at {gap.max_kernel_spread:.1f} in "
+        f"{gap.month_of_max_spread}"
+        + (", the first gap month, where the kernels differ in how fast they move from the pre-gap level to the "
+           "post-gap one" if gap.month_of_max_spread == km.loc[km.period == "gap", "time"].min().strftime("%Y-%m")
+           else "")
+        + f". It exceeds 2 SD of the {KERNEL_LABELS[winner]} global mean in {int(gap[above])} of {int(gap.months)} "
+        "gap months" + ("; there, the stated uncertainty does not cover the choice of kernel." if gap[above] > 0
+                        else "."),
+        "- The gap months are extrapolation under assumptions all kernels share (one global step at the gap start, "
+        "homogeneous covariance); their SDs do not include the timing of the step (Limitations).",
+    ]
+    if ratio is not None:
+        lines.append(f"- Treating the cells as independent would shrink the SD of {KERNEL_LABELS[winner]}'s $G_t$ by "
+                     f"a factor {ratio.min():.0f}–{ratio.max():.0f} (median {ratio.median():.0f}).")
+    return lines + ["", f"Data: [{rel(R / 'model/kernel_global_means.csv')}]({rel(R / 'model/kernel_global_means.csv')}), "
+                        f"[{rel(R / 'model/kernel_gap_summary.csv')}]({rel(R / 'model/kernel_gap_summary.csv')}).", ""]
 
 
 def model_section(cfg):
@@ -278,6 +379,33 @@ def model_section(cfg):
         r"- **Plug-in.** $\hat{\boldsymbol\beta}$ and $\hat\theta$ are plugged in; their uncertainty is not "
         "propagated.",
         "",
+        "### Global mean",
+        f"The monthly global mean $G_t$ averages the {int(180 / res) * int(360 / res):,} predicted cells of month $t$ "
+        "(polar-day cells included) with area weights, where cell $i$ spans latitudes "
+        r"$\varphi_i^{\mathrm{S}}$ to $\varphi_i^{\mathrm{N}}$ and "
+        rf"$\Delta\lambda = {res}°$ of longitude:",
+        "",
+        "```math",
+        r"G_t = \sum_{i} w_i\,\mu_{i,t}, \qquad w_i = \frac{A_i}{\sum_j A_j}, \qquad "
+        r"A_i = R_\oplus^2\,\Delta\lambda\,\big(\sin\varphi_i^{\mathrm{N}} - \sin\varphi_i^{\mathrm{S}}\big)",
+        "```",
+        "",
+        "It is linear in the latent values, so its posterior mean is the weighted mean of the map and its variance "
+        r"needs the full posterior covariance $\mathbf{C}_t$ of the month's cells, not only their variances:",
+        "",
+        "```math",
+        r"\mathbb{E}[G_t \mid \mathbf{y}] = \sum_i w_i\,\mathbb{E}[\mu_{i,t} \mid \mathbf{y}], \qquad "
+        r"\mathrm{Var}[G_t \mid \mathbf{y}] = \mathbf{w}^\top\mathbf{C}_t\,\mathbf{w}, \qquad "
+        r"\mathbf{C}_t = \mathbf{K}_{tt} - \mathbf{K}_{tu}\mathbf{K}_{uu}^{-1}\mathbf{K}_{ut} "
+        r"+ \mathbf{K}_{tu}\boldsymbol\Sigma\mathbf{K}_{ut}",
+        "```",
+        "",
+        "The first term is the prior covariance among the month's cells, and the other two are the sparse-GP "
+        "posterior terms of the Prediction subsection, between those cells and the inducing inputs. Dropping the "
+        r"off-diagonal of $\mathbf{C}_t$ (treating cells as independent) makes the SD far too small, because "
+        "neighbouring cells share most of their error (`sd_if_independent` in `global_mean_monthly.csv`). Like the "
+        "maps, $G_t$ is an estimate of the global monthly-mean CLARA radiance (W m⁻² sr⁻¹), not a flux.",
+        "",
         "### Estimation: sparse variational GP",
         r"An exact GP costs $O(N^3)$ time and $O(N^2)$ memory, and $N$ reaches " + n_full + " training "
         "cell-months in the full fit. The fit therefore uses the variational approximation of Titsias (2009) with "
@@ -375,6 +503,27 @@ def main():
               "cap-smoothed to CLARA's effective footprint (radius chosen per CV fold).",
               "- **Missingness.** Kept explicit: an observation table plus a prediction grid with a `clara_observed` flag.",
               "- **Standardisation.** Only inside each CV fold, with training rows."]
+    omin = read(R / "preprocessing/olr_min_by_year.csv")
+    if omin is not None:
+        base, raised = omin[omin.lower_limit == omin.lower_limit.min()], omin[omin.lower_limit > omin.lower_limit.min()]
+        limits = ", ".join(f"{g.lower_limit.iloc[0]:g} from {g.year.min()}" for _, g in raised.groupby("lower_limit"))
+        troughs = ", ".join(f"{r.trough:.0f} in {r.year}" for r in raised.itertuples())
+        over = raised[raised.lower_limit > raised.trough + 10]
+        lines.insert(lines.index("- **QC.** Night-side footprints (SZA > 100°) and VZA ≤ 60° only.") + 1,
+                     f"- **Radiance range.** Earth-viewing samples must lie in [{base.lower_limit.iloc[0]:g}, 400] "
+                     f"W m⁻² sr⁻¹, with the lower limit raised to {limits}. Each year's Earth-viewing histogram has two "
+                     "populations: a pile-up of near-zero readings that are not Earth OLR, and the Earth-OLR mode. The "
+                     "lower limit is placed in the trough between them, and that trough moves: it lies at "
+                     f"{base.trough.min():.0f}–{base.trough.max():.0f} W m⁻² sr⁻¹ in {base.year.min()}–{base.year.max()}, "
+                     f"then at {troughs} (running mean over 5 bins of ~5 W m⁻² sr⁻¹; "
+                     f"[{rel(R / 'preprocessing/olr_min_by_year.csv')}]({rel(R / 'preprocessing/olr_min_by_year.csv')}), "
+                     f"[{rel(R / 'olr_hist/olr_hist_2025.png')}]({rel(R / 'olr_hist/olr_hist_2025.png')})). The raised limits "
+                     f"remove {raised.removed_by_raise.sum():,} night-side, VZA ≤ 60° samples, "
+                     f"{raised.removed_by_raise.sum() / omin.qc_samples_at_base_limit.sum():.1%} of all and "
+                     + ", ".join(f"{r.removed_share:.1%} in {r.year}" for r in raised.itertuples()) + "."
+                     + (f" The limits are a judgement read off these histograms and apply from their first year on, so "
+                        + ", ".join(f"{r.year} (trough {r.trough:.0f})" for r in over.itertuples())
+                        + f" inherits a limit above its own trough." if len(over) else ""))
     if qc is not None:
         lines += ["", md(qc, "{:.3f}")]
     lines.append("")
@@ -497,6 +646,7 @@ def main():
             lines += ["", f"The worst latitude band in spatial CV is {sp.group_value.iloc[-1]} (RMSE {sp.rmse.iloc[-1]:.1f}); "
                           f"the best is {sp.group_value.iloc[0]} (RMSE {sp.rmse.iloc[0]:.1f}). Period and year rows show "
                           "how errors concentrate around the calibration step and in sparse months.", ""]
+        lines += period_band_section(winner)
         lines += ["## 7. Are the predictive uncertainties calibrated?",
                   "Coverage of central intervals for a new noisy cell-month mean (latent variance + noise for its "
                   "number of overpasses), pooled over held-out blocks:", ""]
@@ -534,6 +684,7 @@ def main():
                       ""]
         else:
             lines += ["", "**Not available: the monthly predictions (Phase 6) have not been run yet.**", ""]
+        lines += kernel_gap_section(winner)
 
     # Q9
     fitted = [json.loads(p.read_text())["gp"] for k in KERNELS if (p := R / f"model/{k}/config.json").exists()]
