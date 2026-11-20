@@ -145,11 +145,13 @@ def global_means(cfg):
     variant, current = PAIRS[0]
     if not all((config.MODEL_DIR / m / "full_model.pt").exists() for m in (variant, current)):
         return None, None
-    out = {}
+    out, maps = {}, {}
     for model in (current, variant):
         m, radius, *_ = full_fit(cfg, model)
         grid, x, ok = predict_maps.predict_grid(cfg, m, radius)
         out[model] = predict_maps.global_mean(cfg, m, grid, x, ok, radius).set_index("time")
+        maps[model] = grid.set_index(["time", "lat", "lon"]).pred_mean
+    write_map_diff(cfg, maps[variant] - maps[current])
     g = pd.DataFrame({"current": out[current].global_mean, "variant": out[variant].global_mean,
                       "sd_current": out[current].sd_full_covariance, "sd_variant": out[variant].sd_full_covariance})
     g["diff"] = g.variant - g.current
@@ -162,6 +164,24 @@ def global_means(cfg):
                      "mean_abs_diff": d.mean(), "mean_diff": sel["diff"].mean(),
                      "months_above_2sd": int((d > 2 * sel.sd_current).sum())})
     return g, pd.DataFrame(rows)
+
+
+def write_map_diff(cfg, diff):
+    """gapslope_map_diff.csv: the cell-level difference of the two posterior mean maps (variant - current), every
+    cell-month counted once: RMS and max |difference| per period."""
+    d = diff.rename("diff").reset_index()
+    d["period"] = kernel_global_means.period(d.time, cfg)
+    rows = []
+    for name in ("pre-gap", "gap", "post-gap", "all"):
+        sel = d if name == "all" else d[d.period == name]
+        a = sel["diff"].abs()
+        top = sel.loc[a.idxmax()]
+        rows.append({"months": name, "cell_months": len(sel), "rms_diff": np.sqrt(np.mean(sel["diff"] ** 2)),
+                     "max_abs_diff": a.max(), "mean_diff": sel["diff"].mean(),
+                     "where_max": f"{pd.Timestamp(top.time):%Y-%m} {top.lat:+.1f} {top.lon:+.1f}"})
+    t = pd.DataFrame(rows)
+    t.to_csv(config.MODEL_DIR / "gapslope_map_diff.csv", index=False, float_format="%.5f")
+    print(f"gapslope_map_diff.csv\n{t.round(3).to_string()}\n")
 
 
 def summarise(cfg):

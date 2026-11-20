@@ -1,0 +1,16 @@
+cv_type,grouping,group,n,cover95
+spatial,period,pre-gap,22562,0.95315
+spatial,period,post-gap,15336,0.92319
+spatial,overpasses,1,13894,0.92328
+spatial,overpasses,2-3,9488,0.93992
+spatial,overpasses,>=4,14516,0.95874
+temporal,period,pre-gap,22562,0.93777
+temporal,period,post-gap,15336,0.90917
+temporal,overpasses,1,13894,0.91219
+temporal,overpasses,2-3,9488,0.92664
+temporal,overpasses,>=4,14516,0.93931
+joint,period,pre-gap,2051,0.96977
+joint,period,post-gap,1234,0.92220
+joint,overpasses,1,1147,0.92502
+joint,overpasses,2-3,833,0.95078
+joint,overpasses,>=4,1305,0.97625

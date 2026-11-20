@@ -30,6 +30,7 @@
 \usepackage{placeins}   % \FloatBarrier only where placed explicitly
 \usepackage{stfloats}   % lets full-width floats sit at the bottom of a page too
 \usepackage{balance}    % balances the columns of the last reference page
+\usepackage{float}      % [H]: supplementary tables stay where they are written
 
 \captionsetup{font=small,labelfont=bf}
 \setlist{nosep,leftmargin=1.2em}
@@ -234,7 +235,7 @@ G_t=\sum_i w_i\,\hat\mu_{i,t},\qquad w_i=\frac{A_i}{\sum_j A_j},\\
 \end{gathered}
 \label{eq:globalmean}
 \end{equation}
-where $\mathbf{C}_t$ is the posterior covariance of the month's latent values. The off-diagonal of $\mathbf{C}_t$ matters: neighbouring cells share their errors, and treating the cells as independent would underestimate the SD of $G_t$ by a factor of \sdRatioMin--\sdRatioMax{} (median \sdRatioMedian). $G_t$ averages all \nCells{} cells, including polar-day cells, whose ERA5 input is the darkest-hours substitute and which CLARA never observes; it is a model-based global average of CLARA-equivalent radiance, not an average of night-side observations.
+where $\mathbf{C}_t$ is the posterior covariance of the month's latent values. The off-diagonal of $\mathbf{C}_t$ matters: neighbouring cells share their errors, and treating the cells as independent would underestimate the SD of $G_t$ by a factor of \sdRatioMin--\sdRatioMax{} (median \sdRatioMedian). $G_t$ averages all \nCells{} cells, including polar-day cells, whose ERA5 input is the darkest-hours substitute and which CLARA never observes; it is a model-based global average of CLARA-equivalent radiance, not an average of night-side observations. Polar-day cells cover \polarShareMin--\polarShareMax\,\% of the globe in a month (median \polarShareMedian\,\%); leaving them out raises $G_t$ by \clara{\gmNoPolarMeanDiff} on average and by at most \clara{\gmNoPolarMaxDiff}.
 
 \subsection{Validation design}\label{sec:cv}
 Neighbouring cells and months are correlated, so randomly held-out cell-months would have close neighbours in the training data. We therefore use blocked cross-validation \cite{roberts2017blockcv} with three designs. The \nFoldsSpatial{} spatial folds each hold out a \cvBlockDeg°$\times$\cvBlockDeg° block and drop training cells within \cvBufferKm\,km of it, the correlogram's range rounded up. The \nFoldsTemporal{} temporal folds each hold out a \cvWindowMonths-month window, with a buffer of \cvBufferMonths{} month on either side; these windows are shorter than the \gapMonths-month gap, so the gap's extrapolation horizon is not directly validated. The \nFoldsJoint{} joint folds hold out a block during a window, with both buffers.
@@ -334,11 +335,11 @@ Parameter & Value \\
 \subsection{Errors, uncertainty and sensitivity}\label{sec:sens}
 Errors are about twice as large after the gap as before it: \rmsePostLo--\clara{\rmsePostHi} against \rmsePreLo--\rmsePreHi{} across the three designs (\cref{tab:rmse_band}). After the gap \singleMinPost--\singleMaxPost\,\% of the held-out cell-months rest on a single overpass, and the observation noise accounts for \noiseMseMinPost--\noiseMseMaxPost\,\% of the mean squared error in every band: most of the post-gap error is sampling noise that no model of the mean can remove. The southernmost band, \bandWorstPre, is the worst before the gap (\clara{\rmseWorstPre}) but not after it (\clara{\rmseWorstPost}).
 
-The \coverNominalHigh\,\% predictive intervals cover \coverMin--\coverMax\,\% of the held-out cell-months (\cref{fig:coverage}). Because observation noise dominates the predictive variance, this mainly tests the noise model. The latent part is tested by whole held-out half-years, and there it is too narrow: the \coverNominalHalf\,\% interval covers a fraction of only \coverHalfTemporal, and the PIT histogram peaks at its edge (\cref{fig:pit}).
+The \coverNominalHigh\,\% predictive intervals cover \coverMin--\coverMax\,\% of the held-out cell-months (\cref{fig:coverage}). Because observation noise dominates the predictive variance, this mainly tests the noise model. The shortfall sits after the gap and in cell-months from a single overpass (\cref{tab:cover_group}): in spatial cross-validation, for example, coverage is \coverPreSpatial\,\% before the gap and \coverPostSpatial\,\% after it, and \coverOneSpatial\,\% for one overpass against \coverFourPlusSpatial\,\% for four or more. The latent part is tested by whole held-out half-years, and there it is too narrow: the \coverNominalHalf\,\% interval covers a fraction of only \coverHalfTemporal, and the PIT histogram peaks at its edge (\cref{fig:pit}).
 
 The three kernels' global means (\cref{fig:kernel_gap}) agree before the gap (mean spread \clara{\kernelSpreadPre}), split by \clara{\kernelSpreadMax} in \kernelSpreadMonth, and after the gap still differ by \clara{\kernelSpreadPost} on average, more than \nSD\,SD of the exponential global mean in \kernelAboveTwoSDPost{} of \nMonthsPost{} months.
 
-The steeper post-gap slope (\cref{sec:eda}) raises the question whether the change across the gap is partly multiplicative. In the regression without the GP, a period-specific slope is clearly supported, $\beta_3=\betaThreeLin\pm\betaThreeLinSE$\,sr$^{-1}$, but it lowers the primary score only from \clara{\scoreCurrentLin} to \clara{\scoreSlopeLin}, with a clear gain only for held-out half-years (paired difference $\dSlopeLinTemporal$, \ciLevel\,\% interval $\dSlopeLinTemporalLo$ to $\dSlopeLinTemporalHi$). With the GP the term shrinks to $\beta_3=\betaThreeGP\pm\betaThreeGPSE$\,sr$^{-1}$: the latent field already absorbs most of the period difference. The primary score is \clara{\scoreSlopeGP} against \clara{\scoreCurrentGP}; the paired differences are $\dSlopeGPSpatial$ for held-out regions and $\dSlopeGPJoint$ for both, and slightly worse for held-out half-years, $+\dSlopeGPTemporal$ (interval \dSlopeGPTemporalLo{} to \dSlopeGPTemporalHi); and the coverage of the \coverNominalHigh\,\% intervals is unchanged (\coverSlopeSpatial, \coverSlopeTemporal{} and \coverSlopeJoint\,\% against \coverCurrentSpatial, \coverCurrentTemporal{} and \coverCurrentJoint\,\%). The monthly global mean moves by at most \clara{\gmSlopeMaxAll} (mean \gmSlopeMeanAll; at most \gmSlopeMaxGap{} in the gap), by more than \nSD\,SD of the current estimate in none of the \gmSlopeMonthsAll{} months. The form of the change across the gap therefore matters far less for the reconstruction than the choice of kernel.
+The steeper post-gap slope (\cref{sec:eda}) raises the question whether the change across the gap is partly multiplicative. In the regression without the GP, a period-specific slope is clearly supported, $\beta_3=\betaThreeLin\pm\betaThreeLinSE$\,sr$^{-1}$, but it lowers the primary score only from \clara{\scoreCurrentLin} to \clara{\scoreSlopeLin}, with a clear gain only for held-out half-years (paired difference $\dSlopeLinTemporal$, \ciLevel\,\% interval $\dSlopeLinTemporalLo$ to $\dSlopeLinTemporalHi$). With the GP the term shrinks to $\beta_3=\betaThreeGP\pm\betaThreeGPSE$\,sr$^{-1}$: the latent field already absorbs most of the period difference. The primary score is \clara{\scoreSlopeGP} against \clara{\scoreCurrentGP}; the paired differences are $\dSlopeGPSpatial$ for held-out regions and $\dSlopeGPJoint$ for both, and slightly worse for held-out half-years, $+\dSlopeGPTemporal$ (interval \dSlopeGPTemporalLo{} to \dSlopeGPTemporalHi); and the coverage of the \coverNominalHigh\,\% intervals is unchanged (\coverSlopeSpatial, \coverSlopeTemporal{} and \coverSlopeJoint\,\% against \coverCurrentSpatial, \coverCurrentTemporal{} and \coverCurrentJoint\,\%). The monthly global mean moves by at most \clara{\gmSlopeMaxAll} (mean \gmSlopeMeanAll; at most \gmSlopeMaxGap{} in the gap), by more than \nSD\,SD of the current estimate in none of the \gmSlopeMonthsAll{} months. Single cells move more: the RMS difference of the maps is \clara{\mapSlopeRmsPre} before the gap, \mapSlopeRmsGap{} in it and \mapSlopeRmsPost{} after it, with at most \clara{\mapSlopeMaxGap} in the gap and \clara{\mapSlopeMaxPost} after it, largest over the Antarctic interior, where ERA5 departs most from its mean and a different slope matters most. For the global mean, the form of the change across the gap therefore matters far less than the choice of kernel; for individual cells far from ERA5's mean it is a visible, if small, part of the structural uncertainty.
 
 \begin{table}[!tb]
 \centering\small
@@ -361,7 +362,7 @@ Band & pre & post & pre & post & pre & post \\
 
 \paragraph{What the observations contribute.} A reconstruction can be predictively accurate without being fully identified by the observations. Out of sample, ERA5 or the GP alone recovers most of the gain over a constant, and the fitted model draws its spatial detail from ERA5 through $\beta_1$. What CLARA itself constrains is a broad level and drift relative to ERA5, carried by $\beta_0$, $\beta_2$ and the near-global latent field. The maps are therefore best read as ERA5's spatial pattern placed on CLARA's radiance scale, and not as an independent measurement of Earth's outgoing longwave flux: CLARA's calibration across the gap, its viewing geometry and its footprint are not yet characterised well enough for that.
 
-\paragraph{Limits of temporal reconstruction.} Two kinds of uncertainty should be distinguished. Within-model uncertainty is what the posterior SD reports, conditional on the selected kernel, the plugged-in parameters and the regression structure; it is close to nominal for held-out regions and too narrow for whole held-out half-years. Structural uncertainty comes from choices that the data cannot settle. Kernels that are indistinguishable on observed data give different answers where observations are missing, because cross-validation only tests the model on the support of the data, and the temporal folds are shorter than the gap. The timing of the change across the gap is unknown, and assigning all gap months to the post-gap level is a convention that directly shapes the earliest gap months. Whether the change is additive or partly multiplicative, by contrast, hardly matters: a period-specific slope leaves the predictions and the global mean nearly unchanged (\cref{sec:sens}). The posterior SD includes none of these effects; reporting the spread across kernels and change-point assumptions alongside it would make them visible.
+\paragraph{Limits of temporal reconstruction.} Two kinds of uncertainty should be distinguished. Within-model uncertainty is what the posterior SD reports, conditional on the selected kernel, the plugged-in parameters and the regression structure; it is close to nominal for held-out regions, but too narrow for whole held-out half-years, after the gap and where a cell-month rests on a single overpass. Structural uncertainty comes from choices that the data cannot settle. Kernels that are indistinguishable on observed data give different answers where observations are missing, because cross-validation only tests the model on the support of the data, and the temporal folds are shorter than the gap. The timing of the change across the gap is unknown. Because no data fall inside the gap, the assumed date does not change the fit at all; it only decides, month by month, whether a gap month receives the step $\beta_2$. Each gap month's prediction, and its global mean, can therefore differ by $\beta_2=\clara{\betaTwo}$ depending on that date, as much as the largest spread between kernels. Whether the change is additive or partly multiplicative, by contrast, hardly matters: a period-specific slope leaves the predictions and the global mean nearly unchanged (\cref{sec:sens}). The posterior SD includes none of these effects; reporting the spread across kernels and change-point assumptions alongside it would make them visible.
 
 \paragraph{Measurement limitations.} CLARA's Earth view has no angular model, so the residual viewing-angle effect is treated as noise, and its wide footprint damps spatial contrasts; collocating CLARA with CERES footprints \cite{pmod_clara_ceres_pipeline} would allow an empirical correction. CLARA sees only the night side at a drifting local time, which night-time ERA5 matches in the mean but not in detail; CERES addresses the same problem between overpasses with geostationary data \cite{doelling2013geo}. The radiance thresholds may remove genuine cold scenes: \lastYear{} keeps the \olrMinRaisedSecondYear{} bound although its trough is lower, which removes \nLastYearTroughToLimit{} samples (\lastYearTroughToLimitPct\,\% of that year's) and may bias \lastYear{} cell-means in cold regions slightly high (\cref{tab:cuts}).
 
@@ -383,8 +384,6 @@ This work was carried out at PMOD/WRC in Davos with support from Academia Raetic
 \bibliographystyle{abbrvnat}
 \bibliography{refs}
 
-\clearpage
-\onecolumn
 \appendix
 \section{Supplementary material}
 
@@ -396,7 +395,7 @@ The tool \texttt{clara-olr-gapfill}, with the command-line interface \texttt{cla
 \subsection{Radiance thresholds}
 \Cref{tab:cuts} lists the lower radiance bound by year. The trough between the near-zero readings and the Earth-radiance mode is located on a running mean of each year's histogram; the raised bounds remove \nRemovedByRaise{} otherwise valid samples (\removedByRaisePct\,\%).
 
-\begin{table}[!htb]
+\begin{table}[H]
 \centering\small
 \caption{Lower radiance bound by year (\Wmsr): the trough of each year's histogram of Earth-viewing samples and the bound applied. The upper bound is \olrMax{} throughout.}
 \label{tab:cuts}
@@ -412,6 +411,25 @@ Year & Trough & Bound applied \\
 \end{tabular}
 \end{table}
 
+\subsection{Coverage by group}
+\Cref{tab:cover_group} splits the coverage of the \coverNominalHigh\,\% predictive intervals of the exponential GP by period and by the number of overpasses behind the held-out cell-month.
+
+\begin{table}[H]
+\centering\small
+\caption{Empirical coverage (\%) of the \coverNominalHigh\,\% predictive intervals of the exponential GP for held-out cell-months, by period and by number of overpasses, for each CV type.}
+\label{tab:cover_group}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+ & Pre-gap & Post-gap & 1 overpass & 2--3 & $\ge$4 \\
+\midrule
+Spatial & \coverPreSpatial & \coverPostSpatial & \coverOneSpatial & \coverTwoThreeSpatial & \coverFourPlusSpatial \\
+Temporal & \coverPreTemporal & \coverPostTemporal & \coverOneTemporal & \coverTwoThreeTemporal & \coverFourPlusTemporal \\
+Joint & \coverPreJoint & \coverPostJoint & \coverOneJoint & \coverTwoThreeJoint & \coverFourPlusJoint \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\onecolumn
 \subsection{Supplementary figures}
 \Cref{fig:pipeline,fig:geometry,fig:resolution,fig:joint_scatter,fig:pit,fig:rmse_fold,fig:residuals} give supporting detail: the pipeline, the observing geometry, CLARA's effective resolution, the cell-by-cell comparison with ERA5, the calibration of the predictive distributions, the spread of errors across folds, and an example of the residuals.
 

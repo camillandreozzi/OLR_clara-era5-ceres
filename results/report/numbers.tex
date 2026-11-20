@@ -245,6 +245,12 @@
 \newcommand{\coverCurrentTemporal}{92.6}  % model/gapslope_coverage.csv: exponential, temporal, cover95 pooled over the held-out cell-months (%)
 \newcommand{\coverSlopeJoint}{95.2}  % model/gapslope_coverage.csv: exponential_gapslope, joint, cover95 pooled over the held-out cell-months (%)
 \newcommand{\coverCurrentJoint}{95.2}  % model/gapslope_coverage.csv: exponential, joint, cover95 pooled over the held-out cell-months (%)
+\newcommand{\mapSlopeRmsPre}{0.25}  % model/gapslope_map_diff.csv: pre-gap, RMS of the posterior mean map exponential_gapslope - exponential, every cell-month (W m-2 sr-1)
+\newcommand{\mapSlopeMaxPre}{0.99}  % model/gapslope_map_diff.csv: pre-gap, max |posterior mean map exponential_gapslope - exponential, every cell-month| (W m-2 sr-1)
+\newcommand{\mapSlopeRmsGap}{1.69}  % model/gapslope_map_diff.csv: gap, RMS of the posterior mean map exponential_gapslope - exponential, every cell-month (W m-2 sr-1)
+\newcommand{\mapSlopeMaxGap}{5.60}  % model/gapslope_map_diff.csv: gap, max |posterior mean map exponential_gapslope - exponential, every cell-month| (W m-2 sr-1)
+\newcommand{\mapSlopeRmsPost}{0.84}  % model/gapslope_map_diff.csv: post-gap, RMS of the posterior mean map exponential_gapslope - exponential, every cell-month (W m-2 sr-1)
+\newcommand{\mapSlopeMaxPost}{4.83}  % model/gapslope_map_diff.csv: post-gap, max |posterior mean map exponential_gapslope - exponential, every cell-month| (W m-2 sr-1)
 \newcommand{\gmSlopeMaxPre}{0.04}  % model/gapslope_global_summary.csv: pre-gap, max |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
 \newcommand{\gmSlopeMeanPre}{0.02}  % model/gapslope_global_summary.csv: pre-gap, mean |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
 \newcommand{\gmSlopeAboveTwoSDPre}{0}  % model/gapslope_global_summary.csv: pre-gap, months with |G_t(exponential_gapslope) - G_t(exponential)| > 2 SD of the current G_t
@@ -261,6 +267,29 @@
 \newcommand{\gmSlopeMeanAll}{0.19}  % model/gapslope_global_summary.csv: all, mean |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
 \newcommand{\gmSlopeAboveTwoSDAll}{0}  % model/gapslope_global_summary.csv: all, months with |G_t(exponential_gapslope) - G_t(exponential)| > 2 SD of the current G_t
 \newcommand{\gmSlopeMonthsAll}{81}  % model/gapslope_global_summary.csv: all, months
+
+% ---- Checks of the exponential GP without refitting (model/exponential/, src/model_checks.py) ------------
+\newcommand{\coverPreSpatial}{95.3}  % model/exponential/coverage_by_group.csv: spatial, period pre-gap, cover95 (%, n = 22562)
+\newcommand{\coverPostSpatial}{92.3}  % model/exponential/coverage_by_group.csv: spatial, period post-gap, cover95 (%, n = 15336)
+\newcommand{\coverOneSpatial}{92.3}  % model/exponential/coverage_by_group.csv: spatial, 1 overpasses, cover95 (%, n = 13894)
+\newcommand{\coverTwoThreeSpatial}{94.0}  % model/exponential/coverage_by_group.csv: spatial, 2-3 overpasses, cover95 (%, n = 9488)
+\newcommand{\coverFourPlusSpatial}{95.9}  % model/exponential/coverage_by_group.csv: spatial, >=4 overpasses, cover95 (%, n = 14516)
+\newcommand{\coverPreTemporal}{93.8}  % model/exponential/coverage_by_group.csv: temporal, period pre-gap, cover95 (%, n = 22562)
+\newcommand{\coverPostTemporal}{90.9}  % model/exponential/coverage_by_group.csv: temporal, period post-gap, cover95 (%, n = 15336)
+\newcommand{\coverOneTemporal}{91.2}  % model/exponential/coverage_by_group.csv: temporal, 1 overpasses, cover95 (%, n = 13894)
+\newcommand{\coverTwoThreeTemporal}{92.7}  % model/exponential/coverage_by_group.csv: temporal, 2-3 overpasses, cover95 (%, n = 9488)
+\newcommand{\coverFourPlusTemporal}{93.9}  % model/exponential/coverage_by_group.csv: temporal, >=4 overpasses, cover95 (%, n = 14516)
+\newcommand{\coverPreJoint}{97.0}  % model/exponential/coverage_by_group.csv: joint, period pre-gap, cover95 (%, n = 2051)
+\newcommand{\coverPostJoint}{92.2}  % model/exponential/coverage_by_group.csv: joint, period post-gap, cover95 (%, n = 1234)
+\newcommand{\coverOneJoint}{92.5}  % model/exponential/coverage_by_group.csv: joint, 1 overpasses, cover95 (%, n = 1147)
+\newcommand{\coverTwoThreeJoint}{95.1}  % model/exponential/coverage_by_group.csv: joint, 2-3 overpasses, cover95 (%, n = 833)
+\newcommand{\coverFourPlusJoint}{97.6}  % model/exponential/coverage_by_group.csv: joint, >=4 overpasses, cover95 (%, n = 1305)
+\newcommand{\polarShareMin}{0.8}  % model/exponential/polar_day_summary.csv: polar_share_min, polar-day area share of a month (%, 81 of 81 months have polar-day cells)
+\newcommand{\polarShareMedian}{3.0}  % model/exponential/polar_day_summary.csv: polar_share_median, polar-day area share of a month (%, 81 of 81 months have polar-day cells)
+\newcommand{\polarShareMax}{9.0}  % model/exponential/polar_day_summary.csv: polar_share_max, polar-day area share of a month (%, 81 of 81 months have polar-day cells)
+\newcommand{\gmNoPolarMaxDiff}{2.17}  % model/exponential/polar_day_summary.csv: max |(mean over cells without polar day) - G_t (all cells)| (W m-2 sr-1), 2022-06
+\newcommand{\gmNoPolarMeanDiff}{0.80}  % model/exponential/polar_day_summary.csv: mean (mean over cells without polar day) - G_t (all cells) (W m-2 sr-1)
+\newcommand{\gmNoPolarMeanAbsDiff}{0.83}  % model/exponential/polar_day_summary.csv: mean |(mean over cells without polar day) - G_t (all cells)| (W m-2 sr-1)
 
 % ---- Quoted from the literature or from the gap-filling tool (not computed here) -------------------------
 \newcommand{\loebPeriodStart}{2000}  % literature: loeb2022trends, CERES vs ERA5 comparison period

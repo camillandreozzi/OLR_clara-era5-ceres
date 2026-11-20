@@ -449,6 +449,7 @@ def build_numbers(cfg):
     N.add("nMonthsPost", int(gsum.months["post-gap"]), "model/kernel_gap_summary.csv: post-gap months")
 
     sensitivity_numbers(N)
+    check_numbers(N, winner)
 
     N.section("Quoted from the literature or from the gap-filling tool (not computed here)")
     for name, value, source in EXTERNAL:
@@ -457,6 +458,32 @@ def build_numbers(cfg):
 
 
 EXAMPLE_MONTH = "2026-08"  # the month of the paper's example maps
+
+
+def check_numbers(N, winner):
+    """Macros of src/model_checks.py: 95 % coverage by period and overpass count, polar-day cells in G_t."""
+    d = R / f"model/{winner}"
+    if not (d / "coverage_by_group.csv").exists() or not (d / "polar_day_summary.csv").exists():
+        print(f"note: no model-check macros yet (run src/model_checks.py)")
+        return
+    N.section(f"Checks of the {winner} GP without refitting (model/{winner}/, src/model_checks.py)")
+    cg = pd.read_csv(d / "coverage_by_group.csv").set_index(["cv_type", "group"])
+    for t in CV_TYPES:
+        for group, tag in (("pre-gap", "Pre"), ("post-gap", "Post"), ("1", "One"), ("2-3", "TwoThree"),
+                           (">=4", "FourPlus")):
+            what = f"period {group}" if "gap" in group else f"{group} overpasses"
+            N.add(f"cover{tag}{t.capitalize()}", pct(cg.cover95[(t, group)], 1),
+                  f"model/{winner}/coverage_by_group.csv: {t}, {what}, cover95 (%, n = {cg.n[(t, group)]})")
+    ps = pd.read_csv(d / "polar_day_summary.csv").iloc[0]
+    src = lambda what: f"model/{winner}/polar_day_summary.csv: {what}"
+    for stat, tag in (("min", "Min"), ("median", "Median"), ("max", "Max")):
+        N.add(f"polarShare{tag}", pct(ps[f"polar_share_{stat}"], 1),
+              src(f"polar_share_{stat}, polar-day area share of a month (%, {ps.months_with_polar_day} of {ps.months} "
+                  "months have polar-day cells)"))
+    what = "(mean over cells without polar day) - G_t (all cells)"
+    N.add("gmNoPolarMaxDiff", f"{ps.max_abs_diff:.2f}", src(f"max |{what}| (W m-2 sr-1), {ps.month_of_max_diff}"))
+    N.add("gmNoPolarMeanDiff", tnum(ps.mean_diff, 2), src(f"mean {what} (W m-2 sr-1)"))
+    N.add("gmNoPolarMeanAbsDiff", f"{ps.mean_abs_diff:.2f}", src(f"mean |{what}| (W m-2 sr-1)"))
 
 
 def sensitivity_numbers(N):
@@ -497,6 +524,13 @@ def sensitivity_numbers(N):
                 for m, name in ((variant, "coverSlope"), (current, "coverCurrent")):
                     N.add(f"{name}{t.capitalize()}", pct(cover.cover95[(m, t)], 1),
                           src("coverage", f"{m}, {t}, cover95 pooled over the held-out cell-months (%)"))
+    if f("map_diff").exists():
+        md = pd.read_csv(f("map_diff")).set_index("months")
+        what = "posterior mean map exponential_gapslope - exponential, every cell-month"
+        for months, tag in (("pre-gap", "Pre"), ("gap", "Gap"), ("post-gap", "Post")):
+            N.add(f"mapSlopeRms{tag}", f"{md.rms_diff[months]:.2f}", src("map_diff", f"{months}, RMS of the {what} (W m-2 sr-1)"))
+            N.add(f"mapSlopeMax{tag}", f"{md.max_abs_diff[months]:.2f}",
+                  src("map_diff", f"{months}, max |{what}| (W m-2 sr-1)"))
     if f("global_summary").exists():
         gs = pd.read_csv(f("global_summary")).set_index("months")
         what = "|G_t(exponential_gapslope) - G_t(exponential)|"

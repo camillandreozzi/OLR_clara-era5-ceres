@@ -1,0 +1,2 @@
+months,months_with_polar_day,polar_share_min,polar_share_median,polar_share_max,month_of_max_share,max_abs_diff,month_of_max_diff,mean_diff,mean_abs_diff,grid_vs_stored_max_abs
+81,81,0.00770,0.03020,0.09040,2020-06,2.17399,2022-06,0.80120,0.82752,0.00005

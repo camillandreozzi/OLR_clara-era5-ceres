@@ -401,7 +401,7 @@ def kernel_gap():
     ax.legend(loc="upper left", ncol=3)
     lo, hi = ax.get_ylim()
     ax.set_ylim(lo, hi + 0.18 * (hi - lo))  # room for the legend above the curves
-    panel(ax, "a", "Global mean of predicted CLARA OLR, by kernel")
+    panel(ax, "a", "Global mean of predicted CLARA radiance, by kernel")
     ax = axes[1]
     ax.plot(spread.index, spread, color=INK, lw=1.3, label="spread between kernels (max − min)")
     ax.plot(sd.index, 2 * sd[w], color=KERNEL_COLORS[w], lw=1.1, ls=styles[w],
@@ -426,7 +426,7 @@ def maps():
     ex, gap = pd.Timestamp(report.EXAMPLE_MONTH), GAP[0]
     fig = paper_figure(PAGE_W, 12.4)
     gs = fig.add_gridspec(2, 2)
-    olr_label = f"CLARA OLR ({CLARA_UNIT})"
+    olr_label = f"CLARA radiance ({CLARA_UNIT})"
     olr_ticks = np.arange(np.ceil(vmin / 20) * 20, vmax + 1, 20)  # the same ticks on every OLR colour bar
     ax_a, ax_b, ax_c, ax_d = (paper_map(fig, gs[i, j]) for i, j in ((0, 0), (0, 1), (1, 0), (1, 1)))
     n_obs = int(np.isfinite(month_field("clara", ex)).sum())
@@ -460,7 +460,7 @@ def global_mean():
     ax.plot(gm.time, gm.global_mean, color=color, lw=1.3, label=f"{KERNEL_NAMES[w]} GP")
     ax.set_ylabel(f"Global mean\n({CLARA_UNIT})")
     ax.legend(loc="lower right", ncol=2)
-    panel(ax, "a", "Monthly global mean of predicted CLARA OLR")
+    panel(ax, "a", "Monthly global mean of predicted CLARA radiance")
     ax = axes[1]
     ax.semilogy(gm.time, gm.sd_full_covariance, color=color, lw=1.3, label="full posterior covariance")
     ax.semilogy(gm.time, gm.sd_if_independent, color=MUTED, lw=1.1, ls="--", label="cells assumed independent")
@@ -642,7 +642,7 @@ def joint_scatter():
         ax.set_xlabel(f"ERA5 night-time OLR ({FLUX_UNIT})")
         style(ax)
         panel(ax, LETTERS[k], p.capitalize())
-    axes[0].set_ylabel(f"CLARA OLR ({CLARA_UNIT})")
+    axes[0].set_ylabel(f"CLARA radiance ({CLARA_UNIT})")
     top = max(h.get_array().max() for h in hbs)
     for h in hbs:
         h.set_norm(LogNorm(1, top))
