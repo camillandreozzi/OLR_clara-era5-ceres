@@ -34,6 +34,12 @@
 
 \captionsetup{font=small,labelfont=bf}
 \setlist{nosep,leftmargin=1.2em}
+\raggedbottom   % never stretch the space between paragraphs and headings to fill a column
+\usepackage[compact]{titlesec}
+\titlespacing*{\section}{0pt}{1.6ex plus .4ex minus .2ex}{0.8ex}
+\titlespacing*{\subsection}{0pt}{1.3ex plus .3ex minus .2ex}{0.5ex}
+\titlespacing*{\paragraph}{0pt}{0.9ex plus .3ex minus .1ex}{0.8em}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \graphicspath{{figures/}}
 
 % ---- compact float layout: floats fill pages, text is never stranded ----------
@@ -101,6 +107,8 @@ The quantity we reconstruct is the \emph{CLARA-equivalent night-side radiance}: 
 % =============================================================================
 \section{Data}\label{sec:data}
 
+We use three datasets, summarised in \cref{tab:data}: CLARA, the target; ERA5, the predictor; and CERES EBAF, an independent reference that is used only for comparison.
+
 \subsection{CLARA on NorSat-1}
 The instrument is described by \citet{walter2017clara}. Its Earth-view record consists of samples every \SI{\cadenceSec}{s}, which we locate at their footprint, the intersection of the instrument's boresight with a sphere of radius \SI{\sphereKm}{km}, using geolocation interpolated from \SI{\geoCadenceMin}{min} intervals. Over \firstYear--\lastYear{} the satellite's altitude falls from about \SI{\altFirst}{km} to \SI{\altLast}{km}, and the viewing angle and local solar time of the night-side samples drift as well (\cref{fig:geometry}).
 
@@ -116,7 +124,7 @@ The CERES EBAF product \cite{loeb2018ebaf} gives the observed all-sky top-of-atm
 \centering\small
 \caption{The three datasets.}
 \label{tab:data}
-\begin{tabularx}{\columnwidth}{@{}lXXX@{}}
+\begin{tabularx}{\columnwidth}{@{}lYYY@{}}
 \toprule
  & CLARA & ERA5 & CERES EBAF \\
 \midrule
@@ -222,7 +230,7 @@ k(\mathbf{x},\mathbf{x}') = \sigma_A^2\,\kappa(r_A) + \sigma_B^2\,\kappa(r_B), \
 r_A^2 = \tfrac{\lVert\mathbf{u}-\mathbf{u}'\rVert^2}{\ell_{sA}^2} + \tfrac{\lVert\mathbf{c}-\mathbf{c}'\rVert^2}{\ell_{\mathrm{season}}^2},\quad
 r_B^2 = \tfrac{\lVert\mathbf{u}-\mathbf{u}'\rVert^2}{\ell_{sB}^2} + \tfrac{(t-t')^2}{\ell_t^2}. \notag
 \end{gather}
-A cell centre is represented by its unit vector $\mathbf{u}\in\mathbb{R}^3$ and distances are chords, so the poles and the dateline need no special treatment and every correlation function below stays positive definite on the sphere. Component A pairs space with the seasonal cycle, $\mathbf{c}$ being the month's position on a unit circle so that December lies next to January: a discrepancy pattern that recurs every year. Component B pairs space with time $t$, in years since \timeOrigin: drift that does not recur. The covariance parameters are $\theta=(\sigma_A,\ell_{sA},\ell_{\mathrm{season}},\sigma_B,\ell_{sB},\ell_t,\sigma_0,\sigma_1)$. We compare three correlation functions $\kappa$ that differ only in the smoothness of the field: the exponential $e^{-r}$, the Gaussian $e^{-r^2/2}$ and the Mat\'ern-3/2 $(1+\sqrt3\,r)\,e^{-\sqrt3\,r}$ \cite{rasmussen2006gpml}.
+A cell centre is represented by its unit vector $\mathbf{u}\in\mathbb{R}^3$ and distances are chords, so the poles and the dateline need no special treatment and every correlation function below stays positive definite on the sphere. Component A pairs space with the seasonal cycle, $\mathbf{c}$ being the month's position on a unit circle so that December lies next to January: a discrepancy pattern that recurs every year. Component B pairs space with time $t$, in years since \timeOrigin: drift that does not recur. The covariance parameters are $\theta=(\sigma_A,\ell_{sA},\ell_{\mathrm{season}},\sigma_B,\ell_{sB},\ell_t,\sigma_0,\sigma_1)$. We compare three correlation functions $\kappa$ in \cref{eq:kernel} that differ only in the smoothness of the field: the exponential $e^{-r}$, the Gaussian $e^{-r^2/2}$ and the Mat\'ern-3/2 $(1+\sqrt3\,r)\,e^{-\sqrt3\,r}$ \cite{rasmussen2006gpml}.
 
 \subsection{Inference and prediction}
 The regression coefficients $\bm\beta=(\beta_0,\beta_1,\beta_2)$ and $\theta$ are estimated together, as in generalised least squares, by maximising the collapsed variational lower bound of \citet{titsias2009vfe} on the log marginal likelihood, extended to the observation-specific noise of \cref{eq:model}, with $M=\nInducing$ inducing inputs (implementation details in \cref{app:impl}). The estimates are plugged in, so all posterior quantities below are conditional on the selected model and its estimated parameters. For every cell-month of the grid we report the posterior mean and the latent posterior SD, the uncertainty of the monthly mean itself; to score a held-out cell-month from $n_*$ overpasses we add its observation noise, $\sigma_0^2+\sigma_1^2/n_*$.
@@ -370,7 +378,7 @@ Band & pre & post & pre & post & pre & post \\
 
 % =============================================================================
 \section{Conclusions}\label{sec:conclusion}
-We have reconstructed complete monthly maps of CLARA-equivalent night-side radiance for \firstYear--\lastYear{} by combining the sparse Earth-view record of a solar radiometer with ERA5, and tested them on data the model never saw. ERA5 supplies the spatial detail and CLARA a broad level and drift; inside the long gap, the reconstruction depends on assumptions that cross-validation cannot settle. The study demonstrates that sparse Earth-view radiance records can be reconstructed by combining satellite observations with reanalysis, while identifying the limits imposed by data gaps and measurement geometry. With improved angular characterisation and independent validation, such observations could provide complementary constraints on reanalysis products and on larger satellite missions.
+We have reconstructed complete monthly maps of CLARA-equivalent night-side radiance for \firstYear--\lastYear{} by combining the sparse Earth-view record of a solar radiometer with ERA5, and tested them on data the model never saw. ERA5 supplies the spatial detail and CLARA a broad level and drift; inside the long gap, the reconstruction depends on assumptions that cross-validation cannot settle. The study shows that sparse Earth-view radiance records can be reconstructed by combining satellite observations with reanalysis, while identifying the limits imposed by data gaps and measurement geometry. With improved angular characterisation and independent validation, such observations could provide complementary constraints on reanalysis products and on larger satellite missions.
 
 \section*{Code and data availability}
 The research pipeline, including the cross-validation folds with their checksum and all tables and figures, is available at \cite{andreozzi2026repo}. The selected model is packaged as the Python tool \texttt{clara-olr-gapfill} \cite{andreozzi2026tool}, which reproduces the maps (\cref{app:impl}). CLARA data are available from PMOD/WRC (\url{https://projects.pmodwrc.ch/clara/}), ERA5 from the Copernicus Climate Data Store, and CERES EBAF from NASA.
@@ -478,7 +486,7 @@ Joint & \coverPreJoint & \coverPostJoint & \coverOneJoint & \coverTwoThreeJoint 
 \begin{figure}[!htb]
 \centering
 \includegraphics{residuals}
-\caption{\textbf{Residuals for an example month.} Observed minus predicted CLARA OLR (\Wmsr) in \exampleMonthName: (a) in-sample, from the full-data fit; (b) out-of-sample, from the spatial CV fold that held out each cell's block. Grey: not observed; one diverging scale for both panels and all months. The error grows only a little out of sample, as expected when observation noise, not the distance to the nearest data, dominates it.}
+\caption{\textbf{Residuals for an example month.} Observed minus predicted CLARA radiance (\Wmsr) in \exampleMonthName: (a) in-sample, from the full-data fit; (b) out-of-sample, from the spatial CV fold that held out each cell's block. Grey: not observed; one diverging scale for both panels and all months. The error grows only a little out of sample, as expected when observation noise, not the distance to the nearest data, dominates it.}
 \label{fig:residuals}
 \end{figure}
 
