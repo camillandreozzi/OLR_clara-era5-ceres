@@ -1,0 +1,13 @@
+model,cv_type,cover50,cover80,cover95
+exponential_gapslope,joint,0.57352,0.83927,0.95221
+exponential_gapslope,spatial,0.54061,0.81355,0.94097
+exponential_gapslope,temporal,0.48261,0.77854,0.92517
+exponential,joint,0.57108,0.84079,0.95190
+exponential,spatial,0.54000,0.81374,0.94103
+exponential,temporal,0.48346,0.77949,0.92620
+linear_gapslope,joint,0.56651,0.83866,0.95099
+linear_gapslope,spatial,0.54509,0.81653,0.94240
+linear_gapslope,temporal,0.54367,0.81619,0.94211
+linear,joint,0.55677,0.83318,0.95221
+linear,spatial,0.54011,0.81606,0.94454
+linear,temporal,0.53755,0.81469,0.94359

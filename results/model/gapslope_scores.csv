@@ -1,0 +1,5 @@
+model,mean_fold_rmse_joint,mean_fold_rmse_spatial,mean_fold_rmse_temporal,primary_score
+exponential,38.14325,36.51941,43.36689,39.34319
+exponential_gapslope,38.12453,36.51845,43.43564,39.35954
+linear,39.84719,37.49670,42.68329,40.00906
+linear_gapslope,39.75029,37.40827,42.51271,39.89042

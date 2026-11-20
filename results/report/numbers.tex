@@ -110,6 +110,8 @@
 \newcommand{\rClaraEra}{0.33}  % eda/joint_stats.csv: all, CLARA vs ERA5 night, r
 \newcommand{\rClaraEraNight}{0.333}  % eda/joint_stats.csv: all, CLARA vs ERA5 night, r
 \newcommand{\rClaraEraDay}{0.331}  % eda/joint_stats.csv: all, CLARA vs ERA5 24 h, r
+\newcommand{\slopePre}{0.45}  % eda/joint_stats.csv: period pre-gap, CLARA vs ERA5 night, slope (sr-1)
+\newcommand{\slopePost}{0.58}  % eda/joint_stats.csv: period post-gap, CLARA vs ERA5 night, slope (sr-1)
 
 % ---- Model fits (model/<kernel>/, model/fold_summary.csv) ------------------------------------------------
 \newcommand{\nInducing}{1\,000}  % model/exponential/config.json: gp.n_inducing
@@ -209,6 +211,56 @@
 \newcommand{\kernelSpreadPost}{4.9}  % model/kernel_gap_summary.csv: post-gap mean_kernel_spread
 \newcommand{\kernelAboveTwoSDPost}{24}  % model/kernel_gap_summary.csv: post-gap months_spread_above_2sd_exponential
 \newcommand{\nMonthsPost}{52}  % model/kernel_gap_summary.csv: post-gap months
+
+% ---- Sensitivity: period-specific ERA5 slope b3 s e (model/gapslope_*.csv, src/sensitivity_gapslope.py) --
+\newcommand{\scoreSlopeLin}{39.89}  % model/gapslope_scores.csv: linear_gapslope primary_score (W m-2 sr-1)
+\newcommand{\scoreCurrentLin}{40.01}  % model/gapslope_scores.csv: linear primary_score (W m-2 sr-1), same folds
+\newcommand{\dSlopeLinSpatial}{\ensuremath{-0.09}}  % model/gapslope_pairwise.csv: linear_gapslope - linear, spatial, mean_rmse_diff (W m-2 sr-1)
+\newcommand{\dSlopeLinSpatialLo}{\ensuremath{-0.22}}  % model/gapslope_pairwise.csv: linear_gapslope - linear, spatial, ci95_lo
+\newcommand{\dSlopeLinSpatialHi}{0.04}  % model/gapslope_pairwise.csv: linear_gapslope - linear, spatial, ci95_hi
+\newcommand{\dSlopeLinTemporal}{\ensuremath{-0.17}}  % model/gapslope_pairwise.csv: linear_gapslope - linear, temporal, mean_rmse_diff (W m-2 sr-1)
+\newcommand{\dSlopeLinTemporalLo}{\ensuremath{-0.27}}  % model/gapslope_pairwise.csv: linear_gapslope - linear, temporal, ci95_lo
+\newcommand{\dSlopeLinTemporalHi}{\ensuremath{-0.07}}  % model/gapslope_pairwise.csv: linear_gapslope - linear, temporal, ci95_hi
+\newcommand{\dSlopeLinJoint}{\ensuremath{-0.10}}  % model/gapslope_pairwise.csv: linear_gapslope - linear, joint, mean_rmse_diff (W m-2 sr-1)
+\newcommand{\dSlopeLinJointLo}{\ensuremath{-0.41}}  % model/gapslope_pairwise.csv: linear_gapslope - linear, joint, ci95_lo
+\newcommand{\dSlopeLinJointHi}{0.21}  % model/gapslope_pairwise.csv: linear_gapslope - linear, joint, ci95_hi
+\newcommand{\betaThreeLin}{0.130}  % model/gapslope_beta.csv: linear_gapslope beta3 (sr-1), full-data fit
+\newcommand{\betaThreeLinSE}{0.009}  % model/gapslope_beta.csv: linear_gapslope beta3_se (sr-1), GLS at the fitted hyperparameters
+\newcommand{\scoreSlopeGP}{39.36}  % model/gapslope_scores.csv: exponential_gapslope primary_score (W m-2 sr-1)
+\newcommand{\scoreCurrentGP}{39.34}  % model/gapslope_scores.csv: exponential primary_score (W m-2 sr-1), same folds
+\newcommand{\dSlopeGPSpatial}{\ensuremath{-0.001}}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, spatial, mean_rmse_diff (W m-2 sr-1)
+\newcommand{\dSlopeGPSpatialLo}{\ensuremath{-0.019}}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, spatial, ci95_lo
+\newcommand{\dSlopeGPSpatialHi}{0.022}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, spatial, ci95_hi
+\newcommand{\dSlopeGPTemporal}{0.069}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, temporal, mean_rmse_diff (W m-2 sr-1)
+\newcommand{\dSlopeGPTemporalLo}{0.003}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, temporal, ci95_lo
+\newcommand{\dSlopeGPTemporalHi}{0.160}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, temporal, ci95_hi
+\newcommand{\dSlopeGPJoint}{\ensuremath{-0.019}}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, joint, mean_rmse_diff (W m-2 sr-1)
+\newcommand{\dSlopeGPJointLo}{\ensuremath{-0.073}}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, joint, ci95_lo
+\newcommand{\dSlopeGPJointHi}{0.027}  % model/gapslope_pairwise.csv: exponential_gapslope - exponential, joint, ci95_hi
+\newcommand{\betaThreeGP}{0.049}  % model/gapslope_beta.csv: exponential_gapslope beta3 (sr-1), full-data fit
+\newcommand{\betaThreeGPSE}{0.019}  % model/gapslope_beta.csv: exponential_gapslope beta3_se (sr-1), GLS at the fitted hyperparameters
+\newcommand{\coverSlopeSpatial}{94.1}  % model/gapslope_coverage.csv: exponential_gapslope, spatial, cover95 pooled over the held-out cell-months (%)
+\newcommand{\coverCurrentSpatial}{94.1}  % model/gapslope_coverage.csv: exponential, spatial, cover95 pooled over the held-out cell-months (%)
+\newcommand{\coverSlopeTemporal}{92.5}  % model/gapslope_coverage.csv: exponential_gapslope, temporal, cover95 pooled over the held-out cell-months (%)
+\newcommand{\coverCurrentTemporal}{92.6}  % model/gapslope_coverage.csv: exponential, temporal, cover95 pooled over the held-out cell-months (%)
+\newcommand{\coverSlopeJoint}{95.2}  % model/gapslope_coverage.csv: exponential_gapslope, joint, cover95 pooled over the held-out cell-months (%)
+\newcommand{\coverCurrentJoint}{95.2}  % model/gapslope_coverage.csv: exponential, joint, cover95 pooled over the held-out cell-months (%)
+\newcommand{\gmSlopeMaxPre}{0.04}  % model/gapslope_global_summary.csv: pre-gap, max |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
+\newcommand{\gmSlopeMeanPre}{0.02}  % model/gapslope_global_summary.csv: pre-gap, mean |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
+\newcommand{\gmSlopeAboveTwoSDPre}{0}  % model/gapslope_global_summary.csv: pre-gap, months with |G_t(exponential_gapslope) - G_t(exponential)| > 2 SD of the current G_t
+\newcommand{\gmSlopeMonthsPre}{20}  % model/gapslope_global_summary.csv: pre-gap, months
+\newcommand{\gmSlopeMaxGap}{0.37}  % model/gapslope_global_summary.csv: gap, max |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
+\newcommand{\gmSlopeMeanGap}{0.29}  % model/gapslope_global_summary.csv: gap, mean |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
+\newcommand{\gmSlopeAboveTwoSDGap}{0}  % model/gapslope_global_summary.csv: gap, months with |G_t(exponential_gapslope) - G_t(exponential)| > 2 SD of the current G_t
+\newcommand{\gmSlopeMonthsGap}{9}  % model/gapslope_global_summary.csv: gap, months
+\newcommand{\gmSlopeMaxPost}{0.65}  % model/gapslope_global_summary.csv: post-gap, max |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
+\newcommand{\gmSlopeMeanPost}{0.23}  % model/gapslope_global_summary.csv: post-gap, mean |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
+\newcommand{\gmSlopeAboveTwoSDPost}{0}  % model/gapslope_global_summary.csv: post-gap, months with |G_t(exponential_gapslope) - G_t(exponential)| > 2 SD of the current G_t
+\newcommand{\gmSlopeMonthsPost}{52}  % model/gapslope_global_summary.csv: post-gap, months
+\newcommand{\gmSlopeMaxAll}{0.65}  % model/gapslope_global_summary.csv: all, max |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
+\newcommand{\gmSlopeMeanAll}{0.19}  % model/gapslope_global_summary.csv: all, mean |G_t(exponential_gapslope) - G_t(exponential)| (W m-2 sr-1)
+\newcommand{\gmSlopeAboveTwoSDAll}{0}  % model/gapslope_global_summary.csv: all, months with |G_t(exponential_gapslope) - G_t(exponential)| > 2 SD of the current G_t
+\newcommand{\gmSlopeMonthsAll}{81}  % model/gapslope_global_summary.csv: all, months
 
 % ---- Quoted from the literature or from the gap-filling tool (not computed here) -------------------------
 \newcommand{\loebPeriodStart}{2000}  % literature: loeb2022trends, CERES vs ERA5 comparison period

@@ -285,6 +285,9 @@ def build_numbers(cfg):
     N.add("rClaraEra", f"{jget('CLARA vs ERA5 night', 'r'):.2f}", jsrc("CLARA vs ERA5 night", "r"))
     N.add("rClaraEraNight", f"{jget('CLARA vs ERA5 night', 'r'):.3f}", jsrc("CLARA vs ERA5 night", "r"))
     N.add("rClaraEraDay", f"{jget('CLARA vs ERA5 24 h', 'r'):.3f}", jsrc("CLARA vs ERA5 24 h", "r"))
+    for p, tag in (("pre-gap", "Pre"), ("post-gap", "Post")):  # the fitted lines of paper_figures.joint_scatter
+        sl = js[(js.group == "period") & (js.label == p) & (js.pair == "CLARA vs ERA5 night")].slope.iloc[0]
+        N.add(f"slope{tag}", f"{sl:.2f}", f"eda/joint_stats.csv: period {p}, CLARA vs ERA5 night, slope (sr-1)")
 
     N.section("Model fits (model/<kernel>/, model/fold_summary.csv)")
     fitted = json.loads((R / "model/exponential/config.json").read_text())
@@ -445,6 +448,8 @@ def build_numbers(cfg):
     N.add("kernelAboveTwoSDPost", int(gsum[above]["post-gap"]), f"model/kernel_gap_summary.csv: post-gap {above}")
     N.add("nMonthsPost", int(gsum.months["post-gap"]), "model/kernel_gap_summary.csv: post-gap months")
 
+    sensitivity_numbers(N)
+
     N.section("Quoted from the literature or from the gap-filling tool (not computed here)")
     for name, value, source in EXTERNAL:
         N.add(name, value, source)
@@ -452,6 +457,57 @@ def build_numbers(cfg):
 
 
 EXAMPLE_MONTH = "2026-08"  # the month of the paper's example maps
+
+
+def sensitivity_numbers(N):
+    """Macros of the period-specific-slope sensitivity (src/sensitivity_gapslope.py, model/gapslope_*.csv): the
+    regression-only pair as soon as it is fitted, the GP pair once the Euler run is in."""
+    d = R / "model"
+    f = lambda name: d / f"gapslope_{name}.csv"
+    if not f("scores").exists():
+        print("note: no sensitivity macros yet (model/gapslope_*.csv missing)")
+        return
+    src = lambda name, what: f"model/gapslope_{name}.csv: {what}"
+    N.section("Sensitivity: period-specific ERA5 slope b3 s e (model/gapslope_*.csv, src/sensitivity_gapslope.py)")
+    sc = pd.read_csv(f("scores"), index_col="model")
+    pw = pd.read_csv(f("pairwise"))
+    be = pd.read_csv(f("beta")).set_index("model") if f("beta").exists() else pd.DataFrame()
+    cover = pd.read_csv(f("coverage")).set_index(["model", "cv_type"]) if f("coverage").exists() else pd.DataFrame()
+    for variant, current, tag in (("linear_gapslope", "linear", "Lin"), ("exponential_gapslope", "exponential", "GP")):
+        if variant not in sc.index:
+            continue
+        N.add(f"scoreSlope{tag}", f"{sc.primary_score[variant]:.2f}",
+              src("scores", f"{variant} primary_score (W m-2 sr-1)"))
+        N.add(f"scoreCurrent{tag}", f"{sc.primary_score[current]:.2f}",
+              src("scores", f"{current} primary_score (W m-2 sr-1), same folds"))
+        for t in CV_TYPES:
+            r = pw[(pw.variant == variant) & (pw.cv_type == t)].iloc[0]
+            what = f"{variant} - {current}, {t}"
+            name = f"dSlope{tag}{t.capitalize()}"
+            dig = 3 if tag == "GP" else 2  # the GP's differences are hundredths: 2 decimals would round CIs to 0
+            N.add(name, tnum(r.mean_rmse_diff, dig), src("pairwise", f"{what}, mean_rmse_diff (W m-2 sr-1)"))
+            N.add(name + "Lo", tnum(r.ci95_lo, dig), src("pairwise", f"{what}, ci95_lo"))
+            N.add(name + "Hi", tnum(r.ci95_hi, dig), src("pairwise", f"{what}, ci95_hi"))
+        if variant in be.index:
+            N.add(f"betaThree{tag}", tnum(be.beta3[variant], 3), src("beta", f"{variant} beta3 (sr-1), full-data fit"))
+            N.add(f"betaThree{tag}SE", tnum(be.beta3_se[variant], 3),
+                  src("beta", f"{variant} beta3_se (sr-1), GLS at the fitted hyperparameters"))
+        if tag == "GP" and len(cover):
+            for t in CV_TYPES:
+                for m, name in ((variant, "coverSlope"), (current, "coverCurrent")):
+                    N.add(f"{name}{t.capitalize()}", pct(cover.cover95[(m, t)], 1),
+                          src("coverage", f"{m}, {t}, cover95 pooled over the held-out cell-months (%)"))
+    if f("global_summary").exists():
+        gs = pd.read_csv(f("global_summary")).set_index("months")
+        what = "|G_t(exponential_gapslope) - G_t(exponential)|"
+        for months, tag in (("pre-gap", "Pre"), ("gap", "Gap"), ("post-gap", "Post"), ("all", "All")):
+            N.add(f"gmSlopeMax{tag}", f"{gs.max_abs_diff[months]:.2f}",
+                  src("global_summary", f"{months}, max {what} (W m-2 sr-1)"))
+            N.add(f"gmSlopeMean{tag}", f"{gs.mean_abs_diff[months]:.2f}",
+                  src("global_summary", f"{months}, mean {what} (W m-2 sr-1)"))
+            N.add(f"gmSlopeAboveTwoSD{tag}", int(gs.months_above_2sd[months]),
+                  src("global_summary", f"{months}, months with {what} > 2 SD of the current G_t"))
+            N.add(f"gmSlopeMonths{tag}", int(gs.n[months]), src("global_summary", f"{months}, months"))
 
 
 # ---------------------------------------------------------------------------
@@ -463,7 +519,7 @@ NON_DATA = [
     r"NorSat-1", r"SHA-256", r"Mat(?:é|\\'e)rn[- ~]3/2", r"\(\d\)",  # names, enumerations (1)...(5)
     r"\d+--\d+ words",  # the abstract's length note
     r"a 1\\,\\% change",  # the 'per 1 %' of a relative slope
-    r"24\s*(?:\\,|~)?\s*h\b",  # '24 h': the daily-mean product, a name rather than a number
+    r"24\s*(?:\\,|~)?\s*h(?:ours)?\b",  # '24 h' / '24 hours': the daily mean, a name rather than a number
     r"lag-1\b",  # the lag-one statistic
 ]
 SKIP_ARGS = ("label", "ref", "cref", "Cref", "eqref", "cite", "citep", "citet", "includegraphics", "input", "url",

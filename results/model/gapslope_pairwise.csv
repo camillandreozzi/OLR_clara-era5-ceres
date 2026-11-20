@@ -1,0 +1,7 @@
+variant,current,cv_type,mean_rmse_diff,ci95_lo,ci95_hi,folds,distinguishable
+exponential_gapslope,exponential,spatial,-0.00097,-0.01906,0.02199,18,False
+exponential_gapslope,exponential,temporal,0.06875,0.00285,0.16029,13,True
+exponential_gapslope,exponential,joint,-0.01873,-0.07272,0.02737,18,False
+linear_gapslope,linear,spatial,-0.08843,-0.22283,0.04292,18,False
+linear_gapslope,linear,temporal,-0.17058,-0.27483,-0.06592,13,True
+linear_gapslope,linear,joint,-0.09691,-0.41306,0.20786,18,False

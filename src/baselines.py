@@ -12,6 +12,9 @@ so is the gap step b2 s (s = post_gap, 0 before the 2021-22 CLARA gap and 1 from
 so <kernel> vs linear is what the kernel adds with ERA5, and <kernel> vs <kernel>_noera5 what ERA5 adds to
 the GP. Without ERA5 the GP is gp.GP(..., era5=False) and ERA5 is never read.
 
+Sensitivity models (src/sensitivity_gapslope.py) add a period-specific ERA5 slope, b3 s e:
+    <kernel>_gapslope   b0 + b1 e + b2 s + b3 s e + f(x)        linear_gapslope   b0 + b1 e + b2 s + b3 s e
+
 LinearModel (regression only) is fitted by exact Gaussian maximum likelihood. For fixed noise (sigma0,
 sigma1) the coefficients are the GLS estimate (closed form), so L-BFGS runs over log sigma0 and log sigma1
 only, with beta profiled out (design [1, e~, s] or a subset). latent_var is the GLS variance of the fitted mean function,
@@ -28,12 +31,17 @@ import gp
 
 LINEAR = ("linear", "linear_noera5")
 NOERA5 = "_noera5"
-ALL_IDS = gp.KERNELS + tuple(k + NOERA5 for k in gp.KERNELS) + LINEAR
+SLOPE = "_gapslope"  # period-specific ERA5 slope (sensitivity models)
+ALL_IDS = gp.KERNELS + tuple(k + NOERA5 for k in gp.KERNELS) + LINEAR + tuple(k + SLOPE for k in gp.KERNELS) \
+    + ("linear" + SLOPE,)
 MAX_ITER = 200  # two noise parameters: cheap, so not tied to the GP budget gp.max_iter
 
 
 def parse(model):
-    """(kernel family, or None for regression only; whether ERA5 is a predictor) of a model id."""
+    """(kernel family, or None for regression only; whether ERA5 is a predictor) of a model id. A _gapslope id
+    parses as its base model (it always has ERA5); has_gap_slope() tells them apart."""
+    if model.endswith(SLOPE) and model[:-len(SLOPE)] in gp.KERNELS + ("linear",):
+        return parse(model[:-len(SLOPE)])
     if model in gp.KERNELS:
         return model, True
     if model.endswith(NOERA5) and model[:-len(NOERA5)] in gp.KERNELS:
@@ -43,10 +51,16 @@ def parse(model):
     raise ValueError(f"unknown model {model!r}; expected one of {ALL_IDS}")
 
 
+def has_gap_slope(model):
+    return model.endswith(SLOPE)
+
+
 def make(model, cfg_gp, z=None):
     """An unfitted model of the given id (z: inducing inputs, GP models only)."""
     family, era5 = parse(model)
-    return gp.GP(family, cfg_gp, z=z, era5=era5) if family else LinearModel(cfg_gp, era5=era5)
+    slope = has_gap_slope(model)
+    return gp.GP(family, cfg_gp, z=z, era5=era5, gap_slope=slope) if family \
+        else LinearModel(cfg_gp, era5=era5, gap_slope=slope)
 
 
 def gp_baselines(cfg):
@@ -57,31 +71,41 @@ def gp_baselines(cfg):
     return [k + NOERA5 for k in kernels]
 
 
+def gap_slope_models(cfg):
+    """The period-specific-slope sensitivity GPs: the winning kernel(s) of [baselines] gp_noera5_kernels."""
+    return [k + SLOPE for k in cfg.get("baselines", {}).get("gp_noera5_kernels", [])]
+
+
 def baseline_models(cfg):
     """Every baseline model id: the two regression-only models and the configured GPs without ERA5."""
     return list(LINEAR) + gp_baselines(cfg)
 
 
 class LinearModel:
-    """Regression only (no kernel): y = b0 [+ b1 e] [+ b2 s] + eps with the GP's heteroscedastic noise."""
+    """Regression only (no kernel): y = b0 [+ b1 e] [+ b2 s] [+ b3 s e] + eps with the GP's heteroscedastic noise."""
 
     family = None
 
-    def __init__(self, cfg_gp, era5=True):
+    def __init__(self, cfg_gp, era5=True, gap_slope=False):
         self.cfg, self.era5 = cfg_gp, era5
         self.step = bool(cfg_gp.get("gap_step", False))  # b2 * post_gap in the mean function
+        self.slope = bool(gap_slope)  # b3 * post_gap * ERA5: a period-specific ERA5 slope
+        if self.slope and not (self.step and self.era5):
+            raise ValueError("gap_slope needs ERA5 and the gap step (gap_step = true)")
         self.stats = None
 
     _step = gp.GP._step
 
     def _design(self, e, s=None):
-        """Design matrix [1, e~ (standardised ERA5, with ERA5), s (post_gap, with the gap step)]."""
+        """Design matrix [1, e~ (standardised ERA5, with ERA5), s (post_gap, with the gap step), s e~ (gap_slope)]."""
         e = np.asarray(e, float)
         cols = [np.ones(len(e))]
         if self.era5:
             cols.append((e - self.stats["e_mean"]) / self.stats["e_sd"])
         if self.step:
             cols.append(np.asarray(s, float))
+        if self.slope:
+            cols.append(cols[1] * cols[2])
         return np.column_stack(cols)
 
     @staticmethod
@@ -126,7 +150,7 @@ class LinearModel:
         self.sigma = (float(s0), float(s1))
         self.bound_value, self.n_evals = float(ll), n_eval[0]
         if verbose:
-            print(f"  linear{'' if self.era5 else NOERA5}: log-likelihood {self.bound_value:.2f} after "
+            print(f"  linear{'' if self.era5 else NOERA5}{SLOPE if self.slope else ''}: log-likelihood {self.bound_value:.2f} after "
                   f"{self.n_evals} evaluations")
         return self
 
@@ -135,8 +159,17 @@ class LinearModel:
         without ERA5, beta2 = 0 without the gap step)."""
         s = self.stats
         b1 = float(self.beta[1]) * s["y_sd"] / s["e_sd"] if self.era5 else 0.0
-        b2 = float(self.beta[1 + self.era5]) * s["y_sd"] if self.step else 0.0
+        # with gap_slope, b2 is the post-gap offset at ERA5 = 0 (the design centres ERA5)
+        b2 = float(self.beta[1 + self.era5]) * s["y_sd"] - self.slope_change() * s["e_mean"] if self.step else 0.0
         return s["y_mean"] + float(self.beta[0]) * s["y_sd"] - b1 * s["e_mean"], b1, b2
+
+    def slope_change(self):
+        """b3 (sr-1): the post-gap minus the pre-gap ERA5 slope; 0 without gap_slope."""
+        return float(self.beta[3]) * self.stats["y_sd"] / self.stats["e_sd"] if self.slope else 0.0
+
+    def slope_change_se(self):
+        """GLS standard error of b3 (sr-1) at the fitted noise; NaN without gap_slope."""
+        return float(np.sqrt(self.cov[3, 3])) * self.stats["y_sd"] / self.stats["e_sd"] if self.slope else np.nan
 
     def predict(self, x, e, n=None, batch=None, s=None):
         """Same output as gp.GP.predict; mean equals mean_fn (there is no GP term)."""
@@ -155,15 +188,17 @@ class LinearModel:
         sy = self.stats["y_sd"]
         return {"kernel": "none", "bound": self.bound_value, "n_evals": self.n_evals, "beta0_wm2": b0, "beta1": b1,
                 "beta2_wm2": b2,
+                **({"beta3": self.slope_change(), "beta3_se": self.slope_change_se()} if self.slope else {}),
                 "sigma0_wm2": self.sigma[0] * sy, "sigma1_wm2": self.sigma[1] * sy}
 
     def state(self):
-        return {"family": None, "cfg": self.cfg, "era5": self.era5, "stats": self.stats, "beta": self.beta,
+        return {"family": None, "cfg": self.cfg, "era5": self.era5, "gap_slope": self.slope, "stats": self.stats,
+                "beta": self.beta,
                 "cov": self.cov, "sigma": self.sigma, "bound_value": self.bound_value, "n_evals": self.n_evals}
 
     @classmethod
     def from_state(cls, st):
-        model = cls(st["cfg"], era5=st["era5"])
+        model = cls(st["cfg"], era5=st["era5"], gap_slope=st.get("gap_slope", False))
         model.stats, model.beta, model.cov, model.sigma = st["stats"], st["beta"], st["cov"], st["sigma"]
         model.bound_value, model.n_evals = st["bound_value"], st["n_evals"]
         return model

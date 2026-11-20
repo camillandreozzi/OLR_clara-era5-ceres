@@ -57,7 +57,7 @@ from style import (CLARA_UNIT, INK, KERNEL_COLORS, KERNEL_LABELS, MUTED, model_c
                    style_axes, title)
 
 CV_TYPES = ("spatial", "temporal", "joint")
-GROUPS = ("kernels", "baselines")  # task lists: the GP kernels, or the GPs without ERA5
+GROUPS = ("kernels", "baselines", "sensitivity")  # task lists: GP kernels, GPs without ERA5, period-slope GPs
 PART_ROWS = 100_000
 
 
@@ -225,10 +225,13 @@ def model_tasks(folds, models):
 def task_list(cfg, folds, group="kernels"):
     """Tasks of a Slurm array. 'kernels' (the default, indices fixed while an array runs): the GP kernels.
     'baselines': the GPs without ERA5 ([baselines] gp_noera5_kernels); the regression-only baselines take
-    seconds and run in one process (--model linear linear_noera5)."""
+    seconds and run in one process (--model linear linear_noera5). 'sensitivity': the winner with a
+    period-specific ERA5 slope (<winner>_gapslope; src/sensitivity_gapslope.py)."""
     if group not in GROUPS:
         raise ValueError(f"unknown task group {group!r}; expected one of {GROUPS}")
-    return model_tasks(folds, cfg["gp"]["kernels"] if group == "kernels" else baselines.gp_baselines(cfg))
+    models = {"kernels": lambda: cfg["gp"]["kernels"], "baselines": lambda: baselines.gp_baselines(cfg),
+              "sensitivity": lambda: baselines.gap_slope_models(cfg)}[group]()
+    return model_tasks(folds, models)
 
 
 def run_task(cfg, index, verbose, group="kernels"):

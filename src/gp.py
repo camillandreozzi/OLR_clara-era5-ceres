@@ -37,6 +37,11 @@ the pre-gap intercept); everything returned is in physical units.
 
 GP(..., era5=False) is the no-ERA5 baseline: the mean function is the constant beta0 (beta1 fixed at 0) and
 ERA5 is never read, so the kernel alone carries the spatio-temporal structure (src/baselines.py).
+
+GP(..., gap_slope=True) is the period-specific-slope sensitivity model: the mean function gains beta3 * s_i * e_i,
+so the ERA5 slope is beta1 before the gap and beta1 + beta3 after it (requires the gap step). beta3 is estimated
+jointly with the other coefficients; mean_coef_covariance() gives its GLS covariance at the fitted
+hyperparameters.
 """
 
 import math
@@ -167,11 +172,14 @@ def inducing_inputs(x, m, cfg_gp, seed):
 class GP:
     """Sparse (VFE) GP with the specification of the module docstring for one kernel family."""
 
-    def __init__(self, family, cfg_gp, z=None, era5=True):
+    def __init__(self, family, cfg_gp, z=None, era5=True, gap_slope=False):
         if family not in KERNELS:
             raise ValueError(f"unknown kernel family {family!r}")
         self.family, self.cfg, self.era5 = family, cfg_gp, era5
         self.step = bool(cfg_gp.get("gap_step", False))  # beta2 * post_gap in the mean function
+        self.slope = bool(gap_slope)  # beta3 * post_gap * ERA5: a period-specific ERA5 slope
+        if self.slope and not (self.step and self.era5):
+            raise ValueError("gap_slope needs ERA5 and the gap step (gap_step = true)")
         self.z = None if z is None else torch.as_tensor(z, dtype=DTYPE)
         self.raw = None  # log of positive parameters (standardised units), and beta
         self.stats = None
@@ -191,18 +199,25 @@ class GP:
         raw["beta1"] = torch.tensor(0.5 if self.era5 else 0.0, dtype=DTYPE, requires_grad=self.era5)
         # without the gap step beta2 is a fixed 0, not a parameter
         raw["beta2"] = torch.tensor(0.0, dtype=DTYPE, requires_grad=self.step)
+        if self.slope:  # only the sensitivity model carries beta3 (other states keep their keys)
+            raw["beta3"] = torch.tensor(0.0, dtype=DTYPE, requires_grad=True)
         return raw
 
     @staticmethod
     def _pos(raw):
         p = {k: torch.exp(raw[k]) + 1e-6 for k in PARAMS}
         p["beta0"], p["beta1"], p["beta2"] = raw["beta0"], raw["beta1"], raw["beta2"]
+        if "beta3" in raw:
+            p["beta3"] = raw["beta3"]
         return p
 
     @staticmethod
     def _mean(p, e, s=None):
-        """Mean function beta0 + beta1 e [+ beta2 s] (standardised units)."""
-        return p["beta0"] + p["beta1"] * e + (p["beta2"] * s if s is not None else 0.0)
+        """Mean function beta0 + beta1 e [+ beta2 s] [+ beta3 s e] (standardised units)."""
+        m = p["beta0"] + p["beta1"] * e
+        if s is not None:
+            m = m + p["beta2"] * s + (p["beta3"] * s * e if "beta3" in p else 0.0)
+        return m
 
     # -- data ---------------------------------------------------------------
     def _standardise(self, y, e):
@@ -350,9 +365,10 @@ class GP:
 
     # -- prediction ---------------------------------------------------------
     def _mean_fn(self, e, s=None):
-        """Mean function beta0 + beta1 e [+ beta2 s] in physical units (CLARA's, W m-2 sr-1)."""
+        """Mean function beta0 + beta1 e [+ beta2 s] [+ beta3 s e] in physical units (CLARA's, W m-2 sr-1)."""
         b0, b1, b2 = self.coefficients()
-        return b0 + b1 * np.asarray(e, float) + (b2 * s if s is not None else 0.0)
+        e = np.asarray(e, float)
+        return b0 + b1 * e + ((b2 + self.slope_change() * e) * s if s is not None else 0.0)
 
     def coefficients(self):
         """(beta0, beta1, beta2) of the mean function in physical units:
@@ -360,7 +376,50 @@ class GP:
         s, p = self.stats, self._post["p"]
         b1 = float(p["beta1"]) * s["y_sd"] / s["e_sd"]
         b0 = s["y_mean"] + float(p["beta0"]) * s["y_sd"] - b1 * s["e_mean"]
-        return b0, b1, float(p["beta2"]) * s["y_sd"]
+        # with gap_slope, beta2 is the post-gap offset at ERA5 = 0 (the standardised model centres ERA5)
+        return b0, b1, float(p["beta2"]) * s["y_sd"] - self.slope_change() * s["e_mean"]
+
+    def slope_change(self):
+        """beta3 (sr-1): the post-gap minus the pre-gap ERA5 slope; 0 without gap_slope."""
+        p = self._post["p"]
+        return float(p["beta3"]) * self.stats["y_sd"] / self.stats["e_sd"] if "beta3" in p else 0.0
+
+    def mean_coef_covariance(self, x, e, n, s=None, chunk=20000):
+        """GLS covariance (H^T Sigma^-1 H)^-1 of the mean coefficients at the fitted hyperparameters, with
+        Sigma = Q + D the VFE approximation of the training covariance and H the standardised design
+        [1, e~ (with ERA5), s (gap step), s e~ (gap_slope)]. Pass the training rows of the fit. The bound is
+        quadratic in the coefficients, so this is also the inverse of minus its Hessian in them. Returned in
+        standardised units with the column names; physical_se() converts."""
+        p, l, sy = self._post["p"], self._post["l"], self.stats["y_sd"]
+        s = self._step(s, len(x))
+        e_std = (np.asarray(e, float) - self.stats["e_mean"]) / self.stats["e_sd"] if self.era5 else None
+        cols, names = [np.ones(len(x))], ["beta0"]
+        if self.era5:
+            cols.append(e_std); names.append("beta1")
+        if self.step:
+            cols.append(s); names.append("beta2")
+        if self.slope:
+            cols.append(s * e_std); names.append("beta3")
+        h = np.column_stack(cols)
+        nn = np.asarray(n, float)
+        hth, ah, aat = 0.0, 0.0, 0.0
+        with torch.no_grad():
+            for i in range(0, len(x), chunk):
+                sl = slice(i, i + chunk)
+                noise = p["sigma0"] ** 2 + p["sigma1"] ** 2 / self._t(nn[sl])
+                ht = self._t(h[sl]) / torch.sqrt(noise)[:, None]
+                a = torch.linalg.solve_triangular(l, kernel(self.family, self.z, self._t(x[sl]), p),
+                                                  upper=False) / torch.sqrt(noise)[None, :]
+                hth, ah, aat = hth + ht.T @ ht, ah + a @ ht, aat + a @ a.T
+            b = torch.eye(aat.shape[0], dtype=DTYPE) + aat
+            prec = hth - ah.T @ torch.linalg.solve(b, ah)
+            cov = torch.linalg.inv(prec).numpy()
+        return names, cov
+
+    def physical_se(self, names, cov):
+        """Standard errors of beta1 and beta3 in sr-1 (the slopes) from mean_coef_covariance()."""
+        scale = self.stats["y_sd"] / self.stats["e_sd"]
+        return {k: float(np.sqrt(cov[i, i])) * scale for i, k in enumerate(names) if k in ("beta1", "beta3")}
 
     def predict(self, x, e, n=None, batch=20000, s=None):
         """Predictions at inputs x with ERA5 e and post_gap s (required with the gap step). Returns a dict of
@@ -425,11 +484,13 @@ class GP:
         """Everything predict() needs, for torch.save (training data are not stored)."""
         post = {k: self._post[k] for k in ("l", "lb", "c")}
         return {"family": self.family, "cfg": self.cfg, "z": self.z, "raw": self.raw, "stats": self.stats,
-                "post": post, "bound_value": self.bound_value, "n_evals": self.n_evals, "era5": self.era5}
+                "post": post, "bound_value": self.bound_value, "n_evals": self.n_evals, "era5": self.era5,
+                "gap_slope": self.slope}
 
     @classmethod
     def from_state(cls, st):
-        model = cls(st["family"], st["cfg"], z=st["z"], era5=st.get("era5", True))  # older states: with ERA5
+        model = cls(st["family"], st["cfg"], z=st["z"], era5=st.get("era5", True),  # older states: with ERA5
+                    gap_slope=st.get("gap_slope", False))
         model.raw, model.stats = st["raw"], st["stats"]
         model.bound_value, model.n_evals = st["bound_value"], st["n_evals"]
         model._post = {"p": cls._pos(st["raw"]), **st["post"]}
@@ -444,7 +505,7 @@ class GP:
         b0, b1, b2 = self.coefficients()
         return {
             "kernel": self.family, "bound": self.bound_value, "n_evals": self.n_evals, "n_inducing": len(self.z),
-            "beta0_wm2": b0, "beta1": b1, "beta2_wm2": b2,
+            "beta0_wm2": b0, "beta1": b1, "beta2_wm2": b2, **({"beta3": self.slope_change()} if self.slope else {}),
             "sigma_A_wm2": float(p["sigma_A"]) * sy, "ell_space_A_km": float(chord_to_km(float(p["ell_space_A"]))),
             "ell_space_A_chord": float(p["ell_space_A"]),
             "ell_season_days": float(chord_to_days(float(p["ell_season"]))), "ell_season_chord": float(p["ell_season"]),
@@ -455,7 +516,8 @@ class GP:
 
 
 def exact_log_marginal(family, p, x, y, e, n, s=None):
-    """Exact log N(y | beta0 + beta1 e [+ beta2 s], K + noise) in the units of y (for tests and benchmarks)."""
+    """Exact log N(y | beta0 + beta1 e [+ beta2 s] [+ beta3 s e], K + noise) in the units of y (for tests and
+    benchmarks)."""
     noise = p["sigma0"] ** 2 + p["sigma1"] ** 2 / n
     r = y - GP._mean(p, e, s)
     k = kernel(family, x, x, p) + torch.diag(noise)

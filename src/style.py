@@ -42,7 +42,10 @@ CLARA_UNIT, FLUX_UNIT, RATIO_UNIT = "W m$^{-2}$ sr$^{-1}$", "W m$^{-2}$", "sr$^{
 
 
 def model_label(model):
-    """Display name of a model id: a GP kernel, <kernel>_noera5, linear or linear_noera5."""
+    """Display name of a model id: a GP kernel, <kernel>_noera5, linear or linear_noera5, or a _gapslope
+    sensitivity model."""
+    if model.endswith("_gapslope"):
+        return model_label(model.removesuffix("_gapslope")).replace(" (no GP)", "") + ", period-specific slope"
     if model in KERNEL_LABELS:
         return f"{KERNEL_LABELS[model]} GP + ERA5"
     if model.removesuffix("_noera5") in KERNEL_LABELS:
@@ -51,6 +54,7 @@ def model_label(model):
 
 
 def model_color(model):
+    model = model.removesuffix("_gapslope")
     return BASELINE_COLORS.get(model) or KERNEL_COLORS[model.removesuffix("_noera5")]
 
 DIVERGING = LinearSegmentedColormap.from_list("div", [

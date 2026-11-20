@@ -1,0 +1,3 @@
+model,era5_radius_km,beta1,beta1_se,beta3,beta3_se,slope_post,slope_post_se
+exponential_gapslope,600.00000,0.53306,0.00993,0.04924,0.01908,0.58229,0.01637
+linear_gapslope,600.00000,0.49177,0.00495,0.12995,0.00911,0.62172,0.00765
